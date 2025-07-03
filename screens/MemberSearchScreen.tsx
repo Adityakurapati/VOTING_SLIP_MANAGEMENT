@@ -19,13 +19,14 @@ const MemberSearchScreen = ({ navigation, route }) => {
         const { voters = [], village = '', division = '', vibhag = '' } = route?.params || {};
 
         // Process voters data from Firebase
+        // In MemberSearchScreen.tsx
         const members = voters.map(voter => ({
                 ...voter,
+                firebaseKey: voter.firebaseKey, // Preserve the key
                 avatar: require('../assets/profile-placeholder.png'),
                 status: voter['स्लिप जारी केली'] ? 'स्लिप जारी केली' :
                         voter['मतदान झाले'] ? 'मतदान झाले' : 'प्रलंबित',
                 id: voter['मतदार_ओळखपत्र_क्रमांक'],
-                voterId: voter['मतदार_ओळखपत्र_क्रमांक'],
                 name: voter['नाव'],
                 address: `${village}, ${division}, ${vibhag}`
         }));
@@ -59,7 +60,7 @@ const MemberSearchScreen = ({ navigation, route }) => {
                                 voter: {
                                         ...item,
                                         // Add the Firebase node key (voter1, voter2, etc)
-                                        firebaseKey: item.key, // This should be 'voter1', 'voter2', etc.
+                                        firebaseKey: item.firebaseKey, // This should be 'voter1', 'voter2', etc.
                                         village: route.params.village,
                                         division: route.params.division,
                                         vibhag: route.params.vibhag

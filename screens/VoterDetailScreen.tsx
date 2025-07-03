@@ -12,69 +12,61 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ref, update } from 'firebase/database';
 import { database } from '../firebaseConfig';
-
 const VoterDetailScreen = ({ route, navigation }) => {
-        const { voter, onStatusUpdate } = route.params;
-        const [currentStatus, setCurrentStatus] = useState(() => {
-                if (voter['मतदान झाले']) return 'voted';
-                if (voter['स्लिप जारी केली']) return 'slipIssued';
-                return 'pending';
-        });
+        const { voter } = route.params;
 
-        const updateStatus = async (newStatus) => {
+        // Debug: Log the received voter data
+        console.log('Received voter data:', voter);
+
+        if (!voter.firebaseKey) {
+                Alert.alert('त्रुटी', 'मतदाराची माहिती अपूर्ण आहे');
+                navigation.goBack();
+                return null;
+        }
+
+        const [currentVoter, setCurrentVoter] = useState(voter);
+
+        const updateStatus = async (field, value) => {
                 try {
-                        // Update local state immediately for better UX
-                        setCurrentStatus(newStatus);
+                        console.log('Updating:', field, value, 'for key:', voter.firebaseKey);
 
-                        // Prepare updates for Firebase
-                        const updates = {};
-                        const voterRef = ref(database, `villages/${voter.village}/${voter.division}/${voter.vibhag}/मतदार_यादी/${voter.key}`);
+                        const voterRef = ref(database,
+                                `villages/${voter.village}/${voter.division}/${voter.vibhag}/मतदार_यादी/${voter.firebaseKey}`
+                        );
 
-                        if (newStatus === 'voted') {
-                                updates['स्लिप जारी केली'] = true;
-                                updates['मतदान झाले'] = true;
-                        } else if (newStatus === 'slipIssued') {
-                                updates['स्लिप जारी केली'] = true;
-                                updates['मतदान झाले'] = false;
-                        } else {
-                                updates['स्लिप जारी केली'] = false;
-                                updates['मतदान झाले'] = false;
-                        }
+                        await update(voterRef, {
+                                [field]: value
+                        });
 
-                        // Update Firebase
-                        await update(voterRef, updates);
+                        setCurrentVoter(prev => ({
+                                ...prev,
+                                [field]: value
+                        }));
 
-                        // Callback to update parent if needed
-                        if (onStatusUpdate) {
-                                onStatusUpdate();
-                        }
-
+                        Alert.alert('यशस्वी', 'स्थिती अद्यतनित केली');
                 } catch (error) {
-                        Alert.alert('त्रुटी', 'स्थिती अद्यतनित करताना त्रुटी आली');
-                        console.error("Error updating status:", error);
-                        // Revert local state if update fails
-                        setCurrentStatus(currentStatus);
+                        console.error('Update failed:', error);
+                        Alert.alert('त्रुटी', 'अद्यतन अयशस्वी');
                 }
         };
 
-        const getStatusText = () => {
-                switch (currentStatus) {
-                        case 'voted': return 'मतदान झाले';
-                        case 'slipIssued': return 'स्लिप जारी केली';
-                        default: return 'प्रलंबित';
-                }
+        const toggleSlipIssued = async () => {
+                const newValue = !currentVoter['स्लिप जारी केली'];
+                await updateStatus('स्लिप जारी केली', newValue);
         };
 
-        const getStatusColor = () => {
-                switch (currentStatus) {
-                        case 'voted': return '#4CAF50';
-                        case 'slipIssued': return '#FFA500';
-                        default: return '#666';
+        const toggleVoted = async () => {
+                if (!currentVoter['स्लिप जारी केली']) {
+                        Alert.alert('चूक', 'प्रथम स्लिप जारी करा');
+                        return;
                 }
+                const newValue = !currentVoter['मतदान झाले'];
+                await updateStatus('मतदान झाले', newValue);
         };
 
         return (
                 <SafeAreaView style={styles.container}>
+                        {/* Header */}
                         <View style={styles.header}>
                                 <TouchableOpacity onPress={() => navigation.goBack()}>
                                         <Ionicons name="arrow-back" size={24} color="#000" />
@@ -82,128 +74,60 @@ const VoterDetailScreen = ({ route, navigation }) => {
                                 <Text style={styles.headerTitle}>मतदार तपशील</Text>
                         </View>
 
-                        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                                <View style={styles.voterCard}>
-                                        <View style={styles.cardHeader}>
-                                                <Text style={styles.voterLabel}>VOTER</Text>
-                                        </View>
-
-                                        <View style={styles.voterInfo}>
-                                                <View style={styles.avatarContainer}>
-                                                        <Image source={voter.avatar} style={styles.voterAvatar} />
-                                                        <Text style={styles.safearareText}>SAFEARARE</Text>
-                                                </View>
-
-                                                <View style={styles.infoLines}>
-                                                        <View style={styles.infoLine} />
-                                                        <View style={styles.infoLine} />
-                                                        <View style={styles.infoLine} />
-                                                        <View style={styles.infoLine} />
-                                                        <View style={styles.infoLine} />
-                                                        <View style={styles.infoLine} />
-                                                        <View style={styles.infoLineLong} />
-                                                </View>
-                                        </View>
-
-                                        <Text style={styles.minimalText}>MINIMAL RESPONSE DONE IF OF WORK</Text>
-                                </View>
-
-                                <View style={styles.detailsSection}>
-                                        <Text style={styles.sectionTitle}>लोकसंख्याशास्त्रीय माहिती</Text>
-
-                                        <View style={styles.detailsGrid}>
-                                                <View style={styles.detailRow}>
-                                                        <View style={styles.detailItem}>
-                                                                <Text style={styles.detailLabel}>नाव</Text>
-                                                                <Text style={styles.detailValue}>{voter.name}</Text>
-                                                        </View>
-                                                        <View style={styles.detailItem}>
-                                                                <Text style={styles.detailLabel}>पत्ता</Text>
-                                                                <Text style={styles.detailValue}>{voter.address}</Text>
-                                                        </View>
-                                                </View>
-
-                                                <View style={styles.detailRow}>
-                                                        <View style={styles.detailItem}>
-                                                                <Text style={styles.detailLabel}>Age</Text>
-                                                                <Text style={styles.detailValue}>{voter.age}</Text>
-                                                        </View>
-                                                        <View style={styles.detailItem}>
-                                                                <Text style={styles.detailLabel}>Gender</Text>
-                                                                <Text style={styles.detailValue}>{voter.gender}</Text>
-                                                        </View>
-                                                </View>
-
-                                                <View style={styles.voterIdSection}>
-                                                        <Text style={styles.detailLabel}>Voter ID</Text>
-                                                        <Text style={styles.voterIdValue}>{voter.voterId}</Text>
-                                                </View>
-                                        </View>
-                                </View>
-
-
+                        <ScrollView style={styles.content}>
+                                {/* Voter Info Section */}
                                 <View style={styles.statusSection}>
-                                        <Text style={styles.sectionTitle}>मतदार स्थिती</Text>
+                                        <Text style={styles.sectionTitle}>स्थिती</Text>
 
-                                        <View style={styles.statusContainer}>
-                                                <Text style={styles.statusText}>{getStatusText()}</Text>
-                                                <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]} />
+                                        <View style={styles.statusRow}>
+                                                <Text style={styles.statusLabel}>सद्य स्थिती:</Text>
+                                                <View style={styles.statusDisplay}>
+                                                        <Text style={styles.statusText}>
+                                                                {currentVoter['मतदान झाले'] ? 'मतदान झाले' :
+                                                                        currentVoter['स्लिप जारी केली'] ? 'स्लिप जारी केली' : 'प्रलंबित'}
+                                                        </Text>
+                                                        <View style={[styles.statusIndicator, {
+                                                                backgroundColor: currentVoter['मतदान झाले'] ? '#4CAF50' :
+                                                                        currentVoter['स्लिप जारी केली'] ? '#FFA500' : '#666'
+                                                        }]} />
+                                                </View>
                                         </View>
 
-                                        <View style={styles.statusToggleContainer}>
+                                        {/* Toggle Buttons */}
+                                        <View style={styles.toggleContainer}>
+                                                <Text style={styles.toggleLabel}>स्लिप जारी करा:</Text>
                                                 <TouchableOpacity
                                                         style={[
-                                                                styles.statusOption,
-                                                                currentStatus === 'pending' && styles.statusOptionActive
+                                                                styles.toggleButton,
+                                                                currentVoter['स्लिप जारी केली'] && styles.toggleActive
                                                         ]}
-                                                        onPress={() => updateStatus('pending')}
+                                                        onPress={toggleSlipIssued}
                                                 >
-                                                        <Text style={[
-                                                                styles.statusOptionText,
-                                                                currentStatus === 'pending' && styles.statusOptionTextActive
-                                                        ]}>
-                                                                प्रलंबित
-                                                        </Text>
-                                                </TouchableOpacity>
-
-                                                <TouchableOpacity
-                                                        style={[
-                                                                styles.statusOption,
-                                                                currentStatus === 'slipIssued' && styles.statusOptionActive
-                                                        ]}
-                                                        onPress={() => updateStatus('slipIssued')}
-                                                >
-                                                        <Text style={[
-                                                                styles.statusOptionText,
-                                                                currentStatus === 'slipIssued' && styles.statusOptionTextActive
-                                                        ]}>
-                                                                स्लिप जारी
-                                                        </Text>
-                                                </TouchableOpacity>
-
-                                                <TouchableOpacity
-                                                        style={[
-                                                                styles.statusOption,
-                                                                currentStatus === 'voted' && styles.statusOptionActive
-                                                        ]}
-                                                        onPress={() => updateStatus('voted')}
-                                                        disabled={currentStatus === 'pending'}
-                                                >
-                                                        <Text style={[
-                                                                styles.statusOptionText,
-                                                                currentStatus === 'voted' && styles.statusOptionTextActive,
-                                                                currentStatus === 'pending' && styles.statusOptionDisabled
-                                                        ]}>
-                                                                मतदान झाले
+                                                        <Text style={styles.toggleText}>
+                                                                {currentVoter['स्लिप जारी केली'] ? 'होय' : 'नाही'}
                                                         </Text>
                                                 </TouchableOpacity>
                                         </View>
 
-                                        {currentStatus === 'pending' && (
-                                                <Text style={styles.noteText}>
-                                                        टीप: प्रथम स्लिप जारी करा, त्यानंतर मतदानाची नोंद करू शकता
-                                                </Text>
-                                        )}
+                                        <View style={styles.toggleContainer}>
+                                                <Text style={styles.toggleLabel}>मतदान झाले:</Text>
+                                                <TouchableOpacity
+                                                        style={[
+                                                                styles.toggleButton,
+                                                                currentVoter['मतदान झाले'] && styles.toggleActive,
+                                                                !currentVoter['स्लिप जारी केली'] && styles.toggleDisabled
+                                                        ]}
+                                                        onPress={toggleVoted}
+                                                        disabled={!currentVoter['स्लिप जारी केली']}
+                                                >
+                                                        <Text style={[
+                                                                styles.toggleText,
+                                                                !currentVoter['स्लिप जारी केली'] && styles.toggleTextDisabled
+                                                        ]}>
+                                                                {currentVoter['मतदान झाले'] ? 'होय' : 'नाही'}
+                                                        </Text>
+                                                </TouchableOpacity>
+                                        </View>
                                 </View>
                         </ScrollView>
                 </SafeAreaView>

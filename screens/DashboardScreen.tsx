@@ -92,12 +92,15 @@ const DashboardScreen = ({ navigation }) => {
                 setSelectedVibhag(vibhag);
         };
 
+        // In DashboardScreen.tsx
         const handleSubmit = () => {
                 if (selectedVillage && selectedBhag && selectedVibhag) {
                         const vibhagData = villageData[selectedVillage][selectedBhag][selectedVibhag];
-                        const votersWithKeys = Object.entries(vibhagData.मतदार_यादी || {}).map(([key, voter]) => ({
-                                ...voter,
-                                firebaseKey: key // Add the Firebase key (voter1, voter2, etc.)
+
+                        // Convert voters object to array with keys
+                        const votersWithKeys = Object.entries(vibhagData.मतदार_यादी || {}).map(([key, voterData]) => ({
+                                ...voterData,
+                                firebaseKey: key // This adds voter1, voter2, etc.
                         }));
 
                         navigation.navigate('Members', {
