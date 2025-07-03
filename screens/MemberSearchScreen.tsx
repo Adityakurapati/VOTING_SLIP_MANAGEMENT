@@ -16,59 +16,27 @@ const MemberSearchScreen = ({ navigation, route }) => {
         const [selectedFilter, setSelectedFilter] = useState('सर्व');
 
         // Get data passed from DashboardScreen
-        const { voters = [], village = '', division = '' } = route?.params || {};
+        const { voters = [], village = '', division = '', vibhag = '' } = route?.params || {};
 
-        // Default data if no voters passed (for testing)
-        const defaultMembers = [
-                {
-                        id: '6789012345',
-                        name: 'दिया रही',
-                        avatar: require('../assets/avatar1.png'),
-                        status: 'स्लिप जारी केली',
-                        age: 28,
-                        gender: 'Female',
-                        address: '७२१ ओक स्ट्रीट, पीम कॉली',
-                        voterId: '1234567890'
-                },
-                {
-                        id: '1234567890',
-                        name: 'अर्जुन शर्मा',
-                        avatar: require('../assets/avatar2.png'),
-                        status: 'मतदान झाले',
-                        age: 35,
-                        gender: 'Male',
-                        address: '४५६ मेन रोड, पुणे',
-                        voterId: '0987654321'
-                },
-                {
-                        id: '9876543210',
-                        name: 'प्रिया शर्मा',
-                        avatar: require('../assets/avatar3.png'),
-                        status: 'स्लिप जारी केली',
-                        age: 30,
-                        gender: 'Female',
-                        address: '१२३ पार्क व्ह्यू, मुंबई',
-                        voterId: '1122334455'
-                },
-        ];
-
-        // Use passed voters or default data
-        const members = voters.length > 0 ? voters.map(voter => ({
+        // Process voters data from Firebase
+        const members = voters.map(voter => ({
                 ...voter,
                 avatar: require('../assets/profile-placeholder.png'),
-                status: Math.random() > 0.5 ? 'स्लिप जारी केली' : 'मतदान झाले',
-                age: Math.floor(Math.random() * 50) + 18,
-                gender: Math.random() > 0.5 ? 'Male' : 'Female',
-                address: `${Math.floor(Math.random() * 1000)} स्ट्रीट, ${village}`,
-                voterId: Math.floor(Math.random() * 10000000000).toString()
-        })) : defaultMembers;
+                status: voter['स्लिप जारी केली'] ? 'स्लिप जारी केली' :
+                        voter['मतदान झाले'] ? 'मतदान झाले' : 'प्रलंबित',
+                id: voter['मतदार_ओळखपत्र_क्रमांक'],
+                voterId: voter['मतदार_ओळखपत्र_क्रमांक'],
+                name: voter['नाव'],
+                address: `${village}, ${division}, ${vibhag}`
+        }));
 
         const filters = ['सर्व', 'स्लिप जारी केली', 'मतदान झाले'];
 
         const filteredMembers = members.filter(member => {
-                const matchesSearch = member.name.toLowerCase().includes(searchText.toLowerCase()) ||
-                        member.id.includes(searchText) ||
-                        member.voterId.includes(searchText);
+                const memberName = member.name || '';
+                const matchesSearch = memberName.toLowerCase().includes(searchText.toLowerCase()) ||
+                        (member.id || '').includes(searchText) ||
+                        (member.voterId || '').includes(searchText);
                 const matchesFilter = selectedFilter === 'सर्व' || member.status === selectedFilter;
                 return matchesSearch && matchesFilter;
         });
@@ -80,19 +48,28 @@ const MemberSearchScreen = ({ navigation, route }) => {
                         case 'मतदान झाले':
                                 return '#4CAF50'; // Green
                         default:
-                                return '#666';
+                                return '#666'; // Gray for pending
                 }
         };
 
         const renderMember = ({ item }) => (
                 <TouchableOpacity
                         style={styles.memberCard}
-                        onPress={() => navigation.navigate('VoterDetail', { voter: item })}
+                        onPress={() => navigation.navigate('VoterDetail', {
+                                voter: {
+                                        ...item,
+                                        // Add the Firebase node key (voter1, voter2, etc)
+                                        firebaseKey: item.key, // This should be 'voter1', 'voter2', etc.
+                                        village: route.params.village,
+                                        division: route.params.division,
+                                        vibhag: route.params.vibhag
+                                }
+                        })}
                 >
                         <Image source={item.avatar} style={styles.memberAvatar} />
                         <View style={styles.memberInfo}>
                                 <Text style={styles.memberName}>{item.name}</Text>
-                                <Text style={styles.memberId}>ID: {item.id}</Text>
+                                <Text style={styles.memberId}>मतदार ID: {item.id}</Text>
                                 <Text style={styles.memberAddress}>{item.address}</Text>
                                 <View style={styles.statusContainer}>
                                         <View style={[styles.statusDot, { backgroundColor: getStatusColor(item.status) }]} />

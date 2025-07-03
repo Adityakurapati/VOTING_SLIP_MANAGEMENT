@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
         View,
         Text,
@@ -7,20 +7,69 @@ import {
         TouchableOpacity,
         Image,
         ScrollView,
+        Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { ref, update } from 'firebase/database';
+import { database } from '../firebaseConfig';
 
 const VoterDetailScreen = ({ route, navigation }) => {
-        const { voter } = route.params;
+        const { voter, onStatusUpdate } = route.params;
+        const [currentStatus, setCurrentStatus] = useState(() => {
+                if (voter['मतदान झाले']) return 'voted';
+                if (voter['स्लिप जारी केली']) return 'slipIssued';
+                return 'pending';
+        });
 
-        const getStatusColor = (status) => {
-                switch (status) {
-                        case 'स्लिप जारी केली':
-                                return '#4CAF50'; // Green
-                        case 'मतदान झाले':
-                                return '#4CAF50'; // Green
-                        default:
-                                return '#666';
+        const updateStatus = async (newStatus) => {
+                try {
+                        // Update local state immediately for better UX
+                        setCurrentStatus(newStatus);
+
+                        // Prepare updates for Firebase
+                        const updates = {};
+                        const voterRef = ref(database, `villages/${voter.village}/${voter.division}/${voter.vibhag}/मतदार_यादी/${voter.key}`);
+
+                        if (newStatus === 'voted') {
+                                updates['स्लिप जारी केली'] = true;
+                                updates['मतदान झाले'] = true;
+                        } else if (newStatus === 'slipIssued') {
+                                updates['स्लिप जारी केली'] = true;
+                                updates['मतदान झाले'] = false;
+                        } else {
+                                updates['स्लिप जारी केली'] = false;
+                                updates['मतदान झाले'] = false;
+                        }
+
+                        // Update Firebase
+                        await update(voterRef, updates);
+
+                        // Callback to update parent if needed
+                        if (onStatusUpdate) {
+                                onStatusUpdate();
+                        }
+
+                } catch (error) {
+                        Alert.alert('त्रुटी', 'स्थिती अद्यतनित करताना त्रुटी आली');
+                        console.error("Error updating status:", error);
+                        // Revert local state if update fails
+                        setCurrentStatus(currentStatus);
+                }
+        };
+
+        const getStatusText = () => {
+                switch (currentStatus) {
+                        case 'voted': return 'मतदान झाले';
+                        case 'slipIssued': return 'स्लिप जारी केली';
+                        default: return 'प्रलंबित';
+                }
+        };
+
+        const getStatusColor = () => {
+                switch (currentStatus) {
+                        case 'voted': return '#4CAF50';
+                        case 'slipIssued': return '#FFA500';
+                        default: return '#666';
                 }
         };
 
@@ -92,23 +141,69 @@ const VoterDetailScreen = ({ route, navigation }) => {
                                         </View>
                                 </View>
 
+
                                 <View style={styles.statusSection}>
-                                        <Text style={styles.sectionTitle}>स्लिप स्थिती</Text>
+                                        <Text style={styles.sectionTitle}>मतदार स्थिती</Text>
 
-                                        <View style={styles.statusRow}>
-                                                <Text style={styles.statusText}>स्लिप जारी केली</Text>
-                                                <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(voter.status) }]} />
+                                        <View style={styles.statusContainer}>
+                                                <Text style={styles.statusText}>{getStatusText()}</Text>
+                                                <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]} />
                                         </View>
-                                </View>
 
-                                <View style={styles.buttonContainer}>
-                                        <TouchableOpacity style={styles.primaryButton}>
-                                                <Text style={styles.primaryButtonText}>रेकॉर्ड स्लिप स्थिती</Text>
-                                        </TouchableOpacity>
+                                        <View style={styles.statusToggleContainer}>
+                                                <TouchableOpacity
+                                                        style={[
+                                                                styles.statusOption,
+                                                                currentStatus === 'pending' && styles.statusOptionActive
+                                                        ]}
+                                                        onPress={() => updateStatus('pending')}
+                                                >
+                                                        <Text style={[
+                                                                styles.statusOptionText,
+                                                                currentStatus === 'pending' && styles.statusOptionTextActive
+                                                        ]}>
+                                                                प्रलंबित
+                                                        </Text>
+                                                </TouchableOpacity>
 
-                                        <TouchableOpacity style={styles.secondaryButton}>
-                                                <Text style={styles.secondaryButtonText}>रद्द करा</Text>
-                                        </TouchableOpacity>
+                                                <TouchableOpacity
+                                                        style={[
+                                                                styles.statusOption,
+                                                                currentStatus === 'slipIssued' && styles.statusOptionActive
+                                                        ]}
+                                                        onPress={() => updateStatus('slipIssued')}
+                                                >
+                                                        <Text style={[
+                                                                styles.statusOptionText,
+                                                                currentStatus === 'slipIssued' && styles.statusOptionTextActive
+                                                        ]}>
+                                                                स्लिप जारी
+                                                        </Text>
+                                                </TouchableOpacity>
+
+                                                <TouchableOpacity
+                                                        style={[
+                                                                styles.statusOption,
+                                                                currentStatus === 'voted' && styles.statusOptionActive
+                                                        ]}
+                                                        onPress={() => updateStatus('voted')}
+                                                        disabled={currentStatus === 'pending'}
+                                                >
+                                                        <Text style={[
+                                                                styles.statusOptionText,
+                                                                currentStatus === 'voted' && styles.statusOptionTextActive,
+                                                                currentStatus === 'pending' && styles.statusOptionDisabled
+                                                        ]}>
+                                                                मतदान झाले
+                                                        </Text>
+                                                </TouchableOpacity>
+                                        </View>
+
+                                        {currentStatus === 'pending' && (
+                                                <Text style={styles.noteText}>
+                                                        टीप: प्रथम स्लिप जारी करा, त्यानंतर मतदानाची नोंद करू शकता
+                                                </Text>
+                                        )}
                                 </View>
                         </ScrollView>
                 </SafeAreaView>
@@ -285,6 +380,54 @@ const styles = StyleSheet.create({
                 color: '#666',
                 fontSize: 16,
                 fontWeight: '600',
+        },
+
+        statusSection: {
+                backgroundColor: '#fff',
+                borderRadius: 12,
+                padding: 20,
+                marginBottom: 20,
+        },
+        statusContainer: {
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 20,
+                padding: 10,
+                backgroundColor: '#f5f5f5',
+                borderRadius: 8,
+        },
+        statusToggleContainer: {
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                marginBottom: 10,
+        },
+        statusOption: {
+                flex: 1,
+                padding: 12,
+                marginHorizontal: 4,
+                borderRadius: 8,
+                backgroundColor: '#f0f0f0',
+                alignItems: 'center',
+        },
+        statusOptionActive: {
+                backgroundColor: '#4A90A4',
+        },
+        statusOptionText: {
+                color: '#333',
+                fontWeight: '500',
+        },
+        statusOptionTextActive: {
+                color: '#fff',
+        },
+        statusOptionDisabled: {
+                color: '#999',
+        },
+        noteText: {
+                color: '#FF8F00',
+                fontSize: 14,
+                textAlign: 'center',
+                marginTop: 10,
         },
 });
 

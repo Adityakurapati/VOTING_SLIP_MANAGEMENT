@@ -3,9 +3,8 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
-import { initializeAuth, getReactNativePersistence, onAuthStateChanged } from 'firebase/auth';
-import { initializeApp } from 'firebase/app';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebaseConfig';
 
 // Import screens
 import LoginScreen from './screens/LoginScreen';
@@ -15,29 +14,12 @@ import MemberSearchScreen from './screens/MemberSearchScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import VoterDetailScreen from './screens/VoterDetailScreen';
 import AdminDashboardScreen from './screens/AdminDashboardScreen';
-import SlipIssueScreen from './screens/SlipIssueScreen'; // New screen import
-
-// Firebase config
-const firebaseConfig = {
-        apiKey: "AIzaSyD04GBzKKyxBrSGL7LeLq99Y37YsEB6aOg",
-        authDomain: "thirdeye-c5b2e.firebaseapp.com",
-        databaseURL: "https://thirdeye-c5b2e-default-rtdb.firebaseio.com",
-        projectId: "thirdeye-c5b2e",
-        storageBucket: "thirdeye-c5b2e.firebasestorage.app",
-        messagingSenderId: "97667042020",
-        appId: "1:97667042020:web:4178bc2c8e9d6818fb7af1",
-        measurementId: "G-FE8WSFS1B7"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = initializeAuth(app, {
-        persistence: getReactNativePersistence(AsyncStorage)
-});
+import SlipIssueScreen from './screens/SlipIssueScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-function TabNavigator() {
+function HomeTabs() {
         return (
                 <Tab.Navigator
                         screenOptions={({ route }) => ({
@@ -64,27 +46,20 @@ function TabNavigator() {
                                 },
                         })}
                 >
-                        <Tab.Screen
-                                name="Dashboard"
-                                component={DashboardScreen}
-                                options={{ tabBarLabel: 'डैशबोर्ड' }}
-                        />
-                        <Tab.Screen
-                                name="Members"
-                                component={MemberSearchScreen}
-                                options={{ tabBarLabel: 'सदस्य' }}
-                        />
-                        <Tab.Screen
-                                name="SlipIssue"
-                                component={SlipIssueScreen}
-                                options={{ tabBarLabel: 'स्लिप समस्या' }}
-                        />
-                        <Tab.Screen
-                                name="Profile"
-                                component={ProfileScreen}
-                                options={{ tabBarLabel: 'प्रोफाइल' }}
-                        />
+                        <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ tabBarLabel: 'डैशबोर्ड' }} />
+                        <Tab.Screen name="Members" component={MemberSearchScreen} options={{ tabBarLabel: 'सदस्य' }} />
+                        <Tab.Screen name="SlipIssue" component={SlipIssueScreen} options={{ tabBarLabel: 'स्लिप समस्या' }} />
+                        <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: 'प्रोफाइल' }} />
                 </Tab.Navigator>
+        );
+}
+
+function AppNavigator() {
+        return (
+                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                        <Stack.Screen name="HomeTabs" component={HomeTabs} />
+                        <Stack.Screen name="VoterDetail" component={VoterDetailScreen} />
+                </Stack.Navigator>
         );
 }
 
@@ -93,10 +68,7 @@ function AuthNavigator() {
                 <Stack.Navigator screenOptions={{ headerShown: false }}>
                         <Stack.Screen name="Login" component={LoginScreen} />
                         <Stack.Screen name="Register" component={RegisterScreen} />
-                        <Stack.Screen name="MainApp" component={TabNavigator} />
                         <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
-                        <Stack.Screen name="MemberSearch" component={MemberSearchScreen} />
-                        <Stack.Screen name="VoterDetail" component={VoterDetailScreen} />
                 </Stack.Navigator>
         );
 }
@@ -120,9 +92,7 @@ export default function App() {
 
         return (
                 <NavigationContainer>
-                        <Stack.Navigator screenOptions={{ headerShown: false }}>
-                                <Stack.Screen name="Auth" component={AuthNavigator} />
-                        </Stack.Navigator>
+                        {user ? <AppNavigator /> : <AuthNavigator />}
                 </NavigationContainer>
         );
 }
