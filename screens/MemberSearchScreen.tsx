@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
         View,
         Text,
@@ -8,23 +8,23 @@ import {
         FlatList,
         TouchableOpacity,
         Image,
+        ActivityIndicator, // Add this import
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useVoters } from '../contexts/VoterContext';
 
 const MemberSearchScreen = ({ navigation, route }) => {
         const [searchText, setSearchText] = useState('');
         const [selectedFilter, setSelectedFilter] = useState('सर्व');
 
-        // Get data passed from DashboardScreen
-        const { voters = [], village = '', division = '', vibhag = '' } = route?.params || {};
+        const { voters, loading, error, currentVillage, currentDivision, currentVibhag } = useVoters();
 
-        // Process voters data from Firebase
-        // In MemberSearchScreen.tsx
+        const { village = currentVillage, division = currentDivision, vibhag = currentVibhag } = route?.params || {};
+
+        // Process voters data
         const members = voters.map(voter => ({
                 ...voter,
-                firebaseKey: voter.firebaseKey,
                 avatar: require('../assets/profile-placeholder.png'),
-                // Updated status logic
                 status: voter['मतदान झाले'] ? 'मतदान झाले' :
                         voter['स्लिप जारी केली'] ? 'स्लिप जारी केली' : 'प्रलंबित',
                 id: voter['मतदार_ओळखपत्र_क्रमांक'],
@@ -46,11 +46,11 @@ const MemberSearchScreen = ({ navigation, route }) => {
         const getStatusColor = (status) => {
                 switch (status) {
                         case 'मतदान झाले':
-                                return '#4CAF50'; // Green for voting done
+                                return '#4CAF50';
                         case 'स्लिप जारी केली':
-                                return '#FFA500'; // Orange for slip issued but not voted
+                                return '#FFA500';
                         default:
-                                return '#666'; // Gray for pending (neither slip issued nor voted)
+                                return '#666';
                 }
         };
 
@@ -60,11 +60,9 @@ const MemberSearchScreen = ({ navigation, route }) => {
                         onPress={() => navigation.navigate('VoterDetail', {
                                 voter: {
                                         ...item,
-                                        // Add the Firebase node key (voter1, voter2, etc)
-                                        firebaseKey: item.firebaseKey, // This should be 'voter1', 'voter2', etc.
-                                        village: route.params.village,
-                                        division: route.params.division,
-                                        vibhag: route.params.vibhag
+                                        village,
+                                        division,
+                                        vibhag
                                 }
                         })}
                 >
@@ -83,6 +81,29 @@ const MemberSearchScreen = ({ navigation, route }) => {
                         <Ionicons name="chevron-forward" size={20} color="#666" />
                 </TouchableOpacity>
         );
+
+        if (loading) {
+                return (
+                        <SafeAreaView style={styles.container}>
+                                <View style={styles.loadingContainer}>
+                                        <ActivityIndicator size="large" color="#007AFF" />
+                                        <Text style={styles.loadingText}>डेटा लोड होत आहे...</Text>
+                                </View>
+                        </SafeAreaView>
+                );
+        }
+
+        if (error) {
+                return (
+                        <SafeAreaView style={styles.container}>
+                                <View style={styles.errorContainer}>
+                                        <Ionicons name="warning" size={48} color="#FF5722" />
+                                        <Text style={styles.errorText}>त्रुटी: {error}</Text>
+                                        <Text style={styles.errorSubText}>कृपया नंतर पुन्हा प्रयत्न करा</Text>
+                                </View>
+                        </SafeAreaView>
+                );
+        }
 
         return (
                 <SafeAreaView style={styles.container}>
@@ -136,7 +157,7 @@ const MemberSearchScreen = ({ navigation, route }) => {
                         <FlatList
                                 data={filteredMembers}
                                 renderItem={renderMember}
-                                keyExtractor={(item) => item.id}
+                                keyExtractor={(item) => item.firebaseKey || item.id} // Use firebaseKey if available, fallback to id
                                 style={styles.membersList}
                                 showsVerticalScrollIndicator={false}
                                 ListEmptyComponent={
@@ -289,6 +310,34 @@ const styles = StyleSheet.create({
         emptyText: {
                 fontSize: 16,
                 color: '#666',
+        },
+        loadingContainer: {
+                flex: 1,
+                justifyContent: 'center',
+                alignItems: 'center',
+        },
+        loadingText: {
+                marginTop: 16,
+                fontSize: 16,
+                color: '#333',
+        },
+        errorContainer: {
+                flex: 1,
+                justifyContent: 'center',
+                alignItems: 'center',
+                padding: 20,
+        },
+        errorText: {
+                marginTop: 16,
+                fontSize: 18,
+                color: '#333',
+                textAlign: 'center',
+        },
+        errorSubText: {
+                marginTop: 8,
+                fontSize: 14,
+                color: '#666',
+                textAlign: 'center',
         },
 });
 

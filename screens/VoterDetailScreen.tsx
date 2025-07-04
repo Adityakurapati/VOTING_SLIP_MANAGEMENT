@@ -11,44 +11,20 @@ import {
         Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ref, update } from 'firebase/database';
-import { database } from '../firebaseConfig';
+import { useVoters } from '../contexts/VoterContext';
 
 const VoterDetailScreen = ({ route, navigation }) => {
         const { voter } = route.params;
+        const { updateVoterStatus } = useVoters();
+        const [currentVoter, setCurrentVoter] = useState(voter);
 
-        if (!voter.firebaseKey) {
+        if (!currentVoter.firebaseKey) {
                 Alert.alert('त्रुटी', 'मतदाराची माहिती अपूर्ण आहे');
                 navigation.goBack();
                 return null;
         }
 
-        const [currentVoter, setCurrentVoter] = useState(voter);
-
-        const updateStatus = async (field, value) => {
-                try {
-                        const voterRef = ref(
-                                database,
-                                `villages/${voter.village}/${voter.division}/${voter.vibhag}/मतदार_यादी/${voter.firebaseKey}`
-                        );
-
-                        await update(voterRef, {
-                                [field]: value
-                        });
-
-                        setCurrentVoter(prev => ({
-                                ...prev,
-                                [field]: value
-                        }));
-
-                } catch (error) {
-                        console.error('Update failed:', error);
-                        Alert.alert('त्रुटी', 'अद्यतन अयशस्वी');
-                }
-        };
-
         const toggleSlipIssued = async (value) => {
-                // Prevent turning slip issued OFF if voting is done
                 if (currentVoter['मतदान झाले'] && !value) {
                         Alert.alert(
                                 'चूक',
@@ -67,7 +43,13 @@ const VoterDetailScreen = ({ route, navigation }) => {
                         return;
                 }
 
-                await updateStatus('स्लिप जारी केली', value);
+                const success = await updateVoterStatus(currentVoter, 'स्लिप जारी केली', value);
+                if (success) {
+                        setCurrentVoter(prev => ({
+                                ...prev,
+                                'स्लिप जारी केली': value
+                        }));
+                }
         };
 
         const toggleVoted = async (value) => {
@@ -75,7 +57,13 @@ const VoterDetailScreen = ({ route, navigation }) => {
                         Alert.alert('चूक', 'प्रथम स्लिप जारी करा');
                         return;
                 }
-                await updateStatus('मतदान झाले', value);
+                const success = await updateVoterStatus(currentVoter, 'मतदान झाले', value);
+                if (success) {
+                        setCurrentVoter(prev => ({
+                                ...prev,
+                                'मतदान झाले': value
+                        }));
+                }
         };
 
         const getStatusText = () => {
@@ -132,28 +120,28 @@ const VoterDetailScreen = ({ route, navigation }) => {
                                                 <View style={styles.detailRow}>
                                                         <View style={styles.detailItem}>
                                                                 <Text style={styles.detailLabel}>नाव</Text>
-                                                                <Text style={styles.detailValue}>{voter.name}</Text>
+                                                                <Text style={styles.detailValue}>{currentVoter.name}</Text>
                                                         </View>
                                                         <View style={styles.detailItem}>
                                                                 <Text style={styles.detailLabel}>पत्ता</Text>
-                                                                <Text style={styles.detailValue}>{voter.address}</Text>
+                                                                <Text style={styles.detailValue}>{currentVoter.address}</Text>
                                                         </View>
                                                 </View>
 
                                                 <View style={styles.detailRow}>
                                                         <View style={styles.detailItem}>
                                                                 <Text style={styles.detailLabel}>वय</Text>
-                                                                <Text style={styles.detailValue}>{voter.age}</Text>
+                                                                <Text style={styles.detailValue}>{currentVoter.age}</Text>
                                                         </View>
                                                         <View style={styles.detailItem}>
                                                                 <Text style={styles.detailLabel}>लिंग</Text>
-                                                                <Text style={styles.detailValue}>{voter.gender}</Text>
+                                                                <Text style={styles.detailValue}>{currentVoter.gender}</Text>
                                                         </View>
                                                 </View>
 
                                                 <View style={styles.voterIdSection}>
                                                         <Text style={styles.detailLabel}>मतदार ओळखपत्र</Text>
-                                                        <Text style={styles.voterIdValue}>{voter.voterId}</Text>
+                                                        <Text style={styles.voterIdValue}>{currentVoter.voterId}</Text>
                                                 </View>
                                         </View>
                                 </View>
@@ -171,7 +159,6 @@ const VoterDetailScreen = ({ route, navigation }) => {
                                                 <Switch
                                                         value={currentVoter['स्लिप जारी केली']}
                                                         onValueChange={toggleSlipIssued}
-                                                        // Disable turning OFF when voting is done
                                                         disabled={currentVoter['मतदान झाले'] && currentVoter['स्लिप जारी केली']}
                                                         thumbColor="#fff"
                                                         trackColor={{
@@ -205,6 +192,7 @@ const VoterDetailScreen = ({ route, navigation }) => {
                 </SafeAreaView>
         );
 };
+
 
 const styles = StyleSheet.create({
         container: {

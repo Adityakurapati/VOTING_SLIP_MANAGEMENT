@@ -1,70 +1,107 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState } from 'react';
 import {
         View,
         Text,
         StyleSheet,
         SafeAreaView,
         TouchableOpacity,
-        ActivityIndicator,
         Image,
-        ScrollView
+        ScrollView,
+        ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ref, onValue } from 'firebase/database';
-import { database } from '../firebaseConfig';
+import { useVoters } from '../contexts/VoterContext';
 
+// Hardcoded data structure based on your requirements
+const VILLAGE_DATA = {
+        'दारुंब्रे': {
+                'यादी भाग ३८७': [''] // Empty array means no further division
+        },
+        'इंदुरी': {
+                'भाग - २२३': [
+                        'इंदुरी गावठाण इंदुरी',
+                        'इंदुरी बाजारपेठ इंदुरी',
+                        'काशिद चाळ इंदुरी',
+                        'इंदुरी बाजारपेठ मागील भाग इंदुरी',
+                        'खांदवे चाळ इंदुरी',
+                        'शिदीया मागील भाग इंदुरी',
+                        'विष्णु मंदीर इंदुरी',
+                        'पवारवाडा इंदुरी',
+                        'काशिद मळा इंदुरी',
+                        'काशिद विट भट्टी इंदुरी',
+                        'राऊत्त विट भट्टी इंदुरी',
+                        'गावठाण इंदुरी'
+                ],
+                'भाग - २२४': [
+                        'गावठाण इंदुरी',
+                        'सुतार वस्ती गावठाण इंदुरी',
+                        'गायकवाड वाडा गावठाण इंदुरी',
+                        'कॅडबरी वस्ती इंदुरी'
+                ],
+                'भाग - २२५': [
+                        'ठाकरवाडी इंदुरी',
+                        'पुनर्वसन वसाहत इंदुरी',
+                        'पानसरे वस्ती इंदुरी',
+                        'कुंडमळा इंदुरी'
+                ]
+        },
+        'जांबवडे': {
+                'यादी भाग १९९': ['']
+        },
+        'मालवाडी': {
+                'यादी भाग १९०': [''],
+                'यादी भाग १९१': ['']
+        },
+        'नवलाख उंब्रे': {
+                'यादी भाग ११८': ['']
+        },
+        'साळुंब्रे': {
+                'यादी भाग ३८३': ['']
+        },
+        'शिरगाव': {
+                'यादी भाग ३५१': ['']
+        },
+        'सुदुंब्रे': {
+                'यादी भाग २००': ['']
+        }
+};
 
 const DashboardScreen = ({ navigation }) => {
         const [expandedSections, setExpandedSections] = useState({
                 village: false,
                 division: false
         });
-        const [selectedVillage, setSelectedVillage] = useState(null);
-        const [selectedBhag, setSelectedBhag] = useState(null);
-        const [selectedVibhag, setSelectedVibhag] = useState(null);
-        const [villageData, setVillageData] = useState(null);
-        const [loading, setLoading] = useState(true);
-        const [error, setError] = useState(null);
+        const [selectedVillage, setSelectedVillage] = useState<string | null>(null);
+        const [selectedBhag, setSelectedBhag] = useState<string | null>(null);
+        const [selectedVibhag, setSelectedVibhag] = useState<string | null>(null);
 
-        useEffect(() => {
-                const villagesRef = ref(database, 'villages');
+        const { refreshVoters, loading } = useVoters();
 
-                const fetchData = onValue(villagesRef, (snapshot) => {
-                        try {
-                                const data = snapshot.val();
-                                if (data) {
-                                        setVillageData(data);
-                                } else {
-                                        setError('No data available in database');
-                                }
-                                setLoading(false);
-                        } catch (err) {
-                                setError(err.message);
-                                setLoading(false);
-                        }
-                }, (error) => {
-                        setError(error.message);
-                        setLoading(false);
-                });
-
-                return () => {
-                        villagesRef.off('value', fetchData);
-                };
-        }, [database]);
-
-        const toggleSection = (section) => {
+        const toggleSection = (section: 'village' | 'division') => {
                 setExpandedSections(prev => ({
                         ...prev,
                         [section]: !prev[section]
                 }));
         };
 
-        const handleVillageSelect = (village) => {
+
+        if (loading) {
+                return (
+                        <SafeAreaView style={styles.container}>
+                                <View style={styles.loadingContainer}>
+                                        <ActivityIndicator size="large" color="#007AFF" />
+                                        <Text style={styles.loadingText}>डेटा लोड होत आहे...</Text>
+                                </View>
+                        </SafeAreaView>
+                );
+        }
+
+        const handleVillageSelect = (village: string) => {
                 setSelectedVillage(village);
                 setSelectedBhag(null);
                 setSelectedVibhag(null);
 
-                const bhags = Object.keys(villageData[village]);
+                const bhags = Object.keys(VILLAGE_DATA[village]);
                 if (bhags.length === 1) {
                         setSelectedBhag(bhags[0]);
                         setExpandedSections({
@@ -79,7 +116,7 @@ const DashboardScreen = ({ navigation }) => {
                 }
         };
 
-        const handleBhagSelect = (bhag) => {
+        const handleBhagSelect = (bhag: string) => {
                 setSelectedBhag(bhag);
                 setSelectedVibhag(null);
                 setExpandedSections({
@@ -88,70 +125,25 @@ const DashboardScreen = ({ navigation }) => {
                 });
         };
 
-        const handleVibhagSelect = (vibhag) => {
+        const handleVibhagSelect = (vibhag: string) => {
                 setSelectedVibhag(vibhag);
         };
 
-        // In DashboardScreen.tsx
         const handleSubmit = () => {
                 if (selectedVillage && selectedBhag && selectedVibhag) {
-                        const vibhagData = villageData[selectedVillage][selectedBhag][selectedVibhag];
-
-                        // Convert voters object to array with keys
-                        const votersWithKeys = Object.entries(vibhagData.मतदार_यादी || {}).map(([key, voterData]) => ({
-                                ...voterData,
-                                firebaseKey: key // This adds voter1, voter2, etc.
-                        }));
-
+                        refreshVoters(selectedVillage, selectedBhag, selectedVibhag);
                         navigation.navigate('Members', {
-                                voters: votersWithKeys,
                                 village: selectedVillage,
                                 division: selectedBhag,
-                                vibhag: selectedVibhag,
-                                metadata: {
-                                        /* your metadata */
-                                }
+                                vibhag: selectedVibhag
                         });
                 }
         };
-        if (loading) {
-                return (
-                        <SafeAreaView style={styles.container}>
-                                <View style={styles.loadingContainer}>
-                                        <ActivityIndicator size="large" color="#007AFF" />
-                                        <Text style={styles.loadingText}>डेटा लोड होत आहे...</Text>
-                                </View>
-                        </SafeAreaView>
-                );
-        }
 
-        if (error) {
-                return (
-                        <SafeAreaView style={styles.container}>
-                                <View style={styles.errorContainer}>
-                                        <Ionicons name="warning" size={48} color="#FF5722" />
-                                        <Text style={styles.errorText}>त्रुटी: {error}</Text>
-                                        <Text style={styles.errorSubText}>कृपया नंतर पुन्हा प्रयत्न करा</Text>
-                                </View>
-                        </SafeAreaView>
-                );
-        }
-
-        if (!villageData) {
-                return (
-                        <SafeAreaView style={styles.container}>
-                                <View style={styles.errorContainer}>
-                                        <Ionicons name="alert-circle" size={48} color="#FFC107" />
-                                        <Text style={styles.errorText}>कोणताही डेटा उपलब्ध नाही</Text>
-                                </View>
-                        </SafeAreaView>
-                );
-        }
-
-        const hasMultipleBhags = selectedVillage && Object.keys(villageData[selectedVillage]).length > 1;
+        const hasMultipleBhags = selectedVillage && Object.keys(VILLAGE_DATA[selectedVillage]).length > 1;
         const hasVibhags = selectedBhag && selectedVillage &&
-                villageData[selectedVillage][selectedBhag] &&
-                Object.keys(villageData[selectedVillage][selectedBhag]).length > 0;
+                VILLAGE_DATA[selectedVillage][selectedBhag] &&
+                VILLAGE_DATA[selectedVillage][selectedBhag].length > 0;
 
         return (
                 <SafeAreaView style={styles.container}>
@@ -191,7 +183,6 @@ const DashboardScreen = ({ navigation }) => {
                                         <Text style={styles.statLabel}>मतदान झाले</Text>
                                 </View>
 
-
                                 {/* Village Dropdown */}
                                 <View style={[styles.expandableSection, { marginTop: 20 }]}>
                                         <TouchableOpacity
@@ -210,7 +201,7 @@ const DashboardScreen = ({ navigation }) => {
 
                                         {expandedSections.village && (
                                                 <View style={styles.dropdownContent}>
-                                                        {Object.keys(villageData).map((village) => (
+                                                        {Object.keys(VILLAGE_DATA).map((village) => (
                                                                 <TouchableOpacity
                                                                         key={village}
                                                                         style={styles.dropdownItem}
@@ -242,7 +233,7 @@ const DashboardScreen = ({ navigation }) => {
 
                                                 {expandedSections.division && (
                                                         <View style={styles.dropdownContent}>
-                                                                {Object.keys(villageData[selectedVillage]).map((bhag) => (
+                                                                {Object.keys(VILLAGE_DATA[selectedVillage]).map((bhag) => (
                                                                         <TouchableOpacity
                                                                                 key={bhag}
                                                                                 style={styles.dropdownItem}
@@ -260,7 +251,7 @@ const DashboardScreen = ({ navigation }) => {
                                 {hasVibhags && (
                                         <View style={styles.expandableSection}>
                                                 <Text style={styles.vibhagLabel}>विभाग निवडा:</Text>
-                                                {Object.keys(villageData[selectedVillage][selectedBhag]).map((vibhag) => (
+                                                {VILLAGE_DATA[selectedVillage][selectedBhag].map((vibhag) => (
                                                         <TouchableOpacity
                                                                 key={vibhag}
                                                                 style={[
@@ -292,7 +283,6 @@ const DashboardScreen = ({ navigation }) => {
                 </SafeAreaView>
         );
 };
-
 const styles = StyleSheet.create({
         header: {
                 flexDirection: 'row',
