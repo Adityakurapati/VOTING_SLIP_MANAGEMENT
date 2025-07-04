@@ -41,7 +41,6 @@ const VoterDetailScreen = ({ route, navigation }) => {
                                 [field]: value
                         }));
 
-                        Alert.alert('यशस्वी', 'स्थिती अद्यतनित केली');
                 } catch (error) {
                         console.error('Update failed:', error);
                         Alert.alert('त्रुटी', 'अद्यतन अयशस्वी');
@@ -49,11 +48,30 @@ const VoterDetailScreen = ({ route, navigation }) => {
         };
 
         const toggleSlipIssued = async (value) => {
+                // Prevent turning slip issued OFF if voting is done
+                if (currentVoter['मतदान झाले'] && !value) {
+                        Alert.alert(
+                                'चूक',
+                                'स्लिप रद्द करण्यापूर्वी कृपया मतदान रद्द करा',
+                                [
+                                        {
+                                                text: 'मतदान रद्द करा',
+                                                onPress: () => toggleVoted(false)
+                                        },
+                                        {
+                                                text: 'रद्द करा',
+                                                style: 'cancel'
+                                        }
+                                ]
+                        );
+                        return;
+                }
+
                 await updateStatus('स्लिप जारी केली', value);
         };
 
         const toggleVoted = async (value) => {
-                if (!currentVoter['स्लिप जारी केली']) {
+                if (value && !currentVoter['स्लिप जारी केली']) {
                         Alert.alert('चूक', 'प्रथम स्लिप जारी करा');
                         return;
                 }
@@ -153,8 +171,13 @@ const VoterDetailScreen = ({ route, navigation }) => {
                                                 <Switch
                                                         value={currentVoter['स्लिप जारी केली']}
                                                         onValueChange={toggleSlipIssued}
+                                                        // Disable turning OFF when voting is done
+                                                        disabled={currentVoter['मतदान झाले'] && currentVoter['स्लिप जारी केली']}
                                                         thumbColor="#fff"
-                                                        trackColor={{ false: '#767577', true: '#4A90A4' }}
+                                                        trackColor={{
+                                                                false: currentVoter['मतदान झाले'] ? '#ccc' : '#767577',
+                                                                true: '#4A90A4'
+                                                        }}
                                                 />
                                         </View>
 

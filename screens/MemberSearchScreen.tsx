@@ -22,10 +22,11 @@ const MemberSearchScreen = ({ navigation, route }) => {
         // In MemberSearchScreen.tsx
         const members = voters.map(voter => ({
                 ...voter,
-                firebaseKey: voter.firebaseKey, // Preserve the key
+                firebaseKey: voter.firebaseKey,
                 avatar: require('../assets/profile-placeholder.png'),
-                status: voter['स्लिप जारी केली'] ? 'स्लिप जारी केली' :
-                        voter['मतदान झाले'] ? 'मतदान झाले' : 'प्रलंबित',
+                // Updated status logic
+                status: voter['मतदान झाले'] ? 'मतदान झाले' :
+                        voter['स्लिप जारी केली'] ? 'स्लिप जारी केली' : 'प्रलंबित',
                 id: voter['मतदार_ओळखपत्र_क्रमांक'],
                 name: voter['नाव'],
                 address: `${village}, ${division}, ${vibhag}`
@@ -44,12 +45,12 @@ const MemberSearchScreen = ({ navigation, route }) => {
 
         const getStatusColor = (status) => {
                 switch (status) {
-                        case 'स्लिप जारी केली':
-                                return '#FFA500'; // Orange
                         case 'मतदान झाले':
-                                return '#4CAF50'; // Green
+                                return '#4CAF50'; // Green for voting done
+                        case 'स्लिप जारी केली':
+                                return '#FFA500'; // Orange for slip issued but not voted
                         default:
-                                return '#666'; // Gray for pending
+                                return '#666'; // Gray for pending (neither slip issued nor voted)
                 }
         };
 
