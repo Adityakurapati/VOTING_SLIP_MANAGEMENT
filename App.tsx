@@ -1,3 +1,4 @@
+// App.tsx
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -5,6 +6,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebaseConfig';
+import { VoterProvider } from './contexts/VoterContext';
 
 // Import screens
 import LoginScreen from './screens/LoginScreen';
@@ -91,8 +93,10 @@ export default function App() {
         }
 
         return (
-                <NavigationContainer>
-                        {user ? <AppNavigator /> : <AuthNavigator />}
-                </NavigationContainer>
+                <VoterProvider>
+                        <NavigationContainer>
+                                {user ? <AppNavigator /> : <AuthNavigator />}
+                        </NavigationContainer>
+                </VoterProvider>
         );
 }
