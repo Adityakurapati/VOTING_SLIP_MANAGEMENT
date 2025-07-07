@@ -78,6 +78,16 @@ const VoterDetailScreen = ({ route, navigation }) => {
                 return '#666';
         };
 
+        // Get parent name based on available field
+        const getParentName = () => {
+                if (currentVoter['पिता_नाव']) {
+                        return `पिता: ${currentVoter['पिता_नाव']}`;
+                } else if (currentVoter['पती_नाव']) {
+                        return `पती: ${currentVoter['पती_नाव']}`;
+                }
+                return '';
+        };
+
         return (
                 <SafeAreaView style={styles.container}>
                         <View style={styles.header}>
@@ -120,7 +130,7 @@ const VoterDetailScreen = ({ route, navigation }) => {
                                                 <View style={styles.detailRow}>
                                                         <View style={styles.detailItem}>
                                                                 <Text style={styles.detailLabel}>नाव</Text>
-                                                                <Text style={styles.detailValue}>{currentVoter.name}</Text>
+                                                                <Text style={styles.detailValue}>{currentVoter['नाव']}</Text>
                                                         </View>
                                                         <View style={styles.detailItem}>
                                                                 <Text style={styles.detailLabel}>पत्ता</Text>
@@ -131,17 +141,28 @@ const VoterDetailScreen = ({ route, navigation }) => {
                                                 <View style={styles.detailRow}>
                                                         <View style={styles.detailItem}>
                                                                 <Text style={styles.detailLabel}>वय</Text>
-                                                                <Text style={styles.detailValue}>{currentVoter.age}</Text>
+                                                                <Text style={styles.detailValue}>{currentVoter['वय']}</Text>
                                                         </View>
                                                         <View style={styles.detailItem}>
                                                                 <Text style={styles.detailLabel}>लिंग</Text>
-                                                                <Text style={styles.detailValue}>{currentVoter.gender}</Text>
+                                                                <Text style={styles.detailValue}>{currentVoter['लिंग']}</Text>
+                                                        </View>
+                                                </View>
+
+                                                <View style={styles.detailRow}>
+                                                        <View style={styles.detailItem}>
+                                                                <Text style={styles.detailLabel}>संबंध</Text>
+                                                                <Text style={styles.detailValue}>{getParentName()}</Text>
+                                                        </View>
+                                                        <View style={styles.detailItem}>
+                                                                <Text style={styles.detailLabel}>क्रमांक</Text>
+                                                                <Text style={styles.detailValue}>{currentVoter['क्रमांक']}</Text>
                                                         </View>
                                                 </View>
 
                                                 <View style={styles.voterIdSection}>
                                                         <Text style={styles.detailLabel}>मतदार ओळखपत्र</Text>
-                                                        <Text style={styles.voterIdValue}>{currentVoter.voterId}</Text>
+                                                        <Text style={styles.voterIdValue}>{currentVoter['मतदार_ओळखपत्र_क्रमांक']}</Text>
                                                 </View>
                                         </View>
                                 </View>
