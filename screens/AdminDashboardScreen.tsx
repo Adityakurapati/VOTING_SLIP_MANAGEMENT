@@ -1,227 +1,186 @@
+// screens/AdminDashboardScreen.tsx
 import React, { useState } from 'react';
-import {
-        View,
-        Text,
-        StyleSheet,
-        SafeAreaView,
-        TouchableOpacity,
-        ScrollView,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import { format, parseISO, isToday, isYesterday, differenceInMinutes } from 'date-fns';
 
-const AdminDashboardScreen = () => {
-        const [selectedVillage, setSelectedVillage] = useState('');
-        const [selectedDivision, setSelectedDivision] = useState('');
-        const [showVillageDropdown, setShowVillageDropdown] = useState(false);
-        const [showDivisionDropdown, setShowDivisionDropdown] = useState(false);
+type Session = {
+        id: string;
+        loginTime: string;
+        logoutTime: string | null;
+};
 
-        const villages = ['गाव अ', 'गाव ब', 'गाव क', 'गाव ड'];
+type User = {
+        phone: string;
+        currentSession: string | null;
+        sessions: Record<string, Session>;
+};
+
+type UsersData = Record<string, User>;
+
+const AdminDashboardScreen = ({ navigation }) => {
+        // Sample data directly in the component
+        const [usersData] = useState<UsersData>({
+                "user1": {
+                        phone: "+911234567890",
+                        currentSession: "session3",
+                        sessions: {
+                                "session1": {
+                                        id: "session1",
+                                        loginTime: "2025-07-10T09:00:00Z",
+                                        logoutTime: "2025-07-10T13:00:00Z"
+                                },
+                                "session2": {
+                                        id: "session2",
+                                        loginTime: "2025-07-10T17:00:00Z",
+                                        logoutTime: "2025-07-10T20:00:00Z"
+                                },
+                                "session3": {
+                                        id: "session3",
+                                        loginTime: new Date().toISOString(), // Current session
+                                        logoutTime: null
+                                }
+                        }
+                },
+                "user2": {
+                        phone: "+919876543210",
+                        currentSession: null,
+                        sessions: {
+                                "session4": {
+                                        id: "session4",
+                                        loginTime: "2025-07-11T08:45:00Z",
+                                        logoutTime: "2025-07-11T12:30:00Z"
+                                },
+                                "session5": {
+                                        id: "session5",
+                                        loginTime: "2025-07-11T14:15:00Z",
+                                        logoutTime: "2025-07-11T18:00:00Z"
+                                }
+                        }
+                },
+                "user3": {
+                        phone: "+917654321098",
+                        currentSession: "session6",
+                        sessions: {
+                                "session6": {
+                                        id: "session6",
+                                        loginTime: "2025-07-12T07:00:00Z",
+                                        logoutTime: null // Active session
+                                }
+                        }
+                }
+        });
+
+        const [searchTerm, setSearchTerm] = useState('');
+        const [activeOnly, setActiveOnly] = useState(false);
+
+        // Rest of your component logic...
+        const filteredUsers = Object.entries(usersData).filter(([userId, user]) => {
+                const matchesSearch = user.phone.includes(searchTerm) || userId.includes(searchTerm);
+                const matchesActive = !activeOnly || user.currentSession !== null;
+                return matchesSearch && matchesActive;
+        });
 
         return (
-                <SafeAreaView style={styles.container}>
+                <ScrollView style={styles.container}>
+                        {/* Your existing UI components */}
                         <View style={styles.header}>
-                                <TouchableOpacity>
-                                        <Ionicons name="menu" size={24} color="#000" />
-                                </TouchableOpacity>
-                                <Text style={styles.headerTitle}>अॅडमिन डैशबोर्ड</Text>
-                                <TouchableOpacity>
-                                        <Ionicons name="settings" size={24} color="#000" />
+                                <Text style={styles.title}>प्रशासन डैशबोर्ड</Text>
+                        </View>
+
+                        {/* Search and filter controls */}
+                        <View style={styles.controls}>
+                                <TextInput
+                                        style={styles.searchInput}
+                                        placeholder="खोजें..."
+                                        value={searchTerm}
+                                        onChangeText={setSearchTerm}
+                                />
+                                <TouchableOpacity
+                                        style={[styles.filterButton, activeOnly && styles.activeFilter]}
+                                        onPress={() => setActiveOnly(!activeOnly)}
+                                >
+                                        <Text style={styles.filterButtonText}>
+                                                {activeOnly ? 'सभी दिखाएं' : 'केवल सक्रिय'}
+                                        </Text>
                                 </TouchableOpacity>
                         </View>
 
-                        <ScrollView style={styles.content}>
-                                <Text style={styles.sectionTitle}>सारांश</Text>
-
-                                <View style={styles.statsContainer}>
-                                        <View style={styles.statCard}>
-                                                <Text style={styles.statNumber}>१२,५००</Text>
-                                                <Text style={styles.statLabel}>एकूण मतदार</Text>
-                                        </View>
-
-                                        <View style={styles.statCard}>
-                                                <Text style={styles.statNumber}>१०,०००</Text>
-                                                <Text style={styles.statLabel}>दिलेप जारी केल्या</Text>
-                                        </View>
-                                </View>
-
-                                <View style={styles.statCardFull}>
-                                        <Text style={styles.statNumber}>८,५००</Text>
-                                        <Text style={styles.statLabel}>मतदान झाले</Text>
-                                </View>
-
-                                <Text style={styles.sectionTitle}>गावाची प्रगती</Text>
-
-                                <View style={styles.dropdownContainer}>
+                        {/* User list rendering */}
+                        <View style={styles.usersList}>
+                                {filteredUsers.map(([userId, user]) => (
                                         <TouchableOpacity
-                                                style={styles.dropdown}
-                                                onPress={() => setShowVillageDropdown(!showVillageDropdown)}
+                                                key={userId}
+                                                style={styles.userCard}
+                                                onPress={() => navigation.navigate('UserDetail', { userId })}
                                         >
-                                                <Text style={styles.dropdownText}>गाव निवडा</Text>
-                                                <Ionicons
-                                                        name={showVillageDropdown ? "chevron-up" : "chevron-down"}
-                                                        size={20}
-                                                        color="#666"
-                                                />
+                                                <Text style={styles.userPhone}>{user.phone}</Text>
+                                                <Text style={styles.userStatus}>
+                                                        {user.currentSession ? 'सक्रिय' : 'निष्क्रिय'}
+                                                </Text>
                                         </TouchableOpacity>
-
-                                        <TouchableOpacity
-                                                style={styles.dropdown}
-                                                onPress={() => setShowDivisionDropdown(!showDivisionDropdown)}
-                                        >
-                                                <Text style={styles.dropdownText}>प्रभाग निवडा</Text>
-                                                <Ionicons
-                                                        name={showDivisionDropdown ? "chevron-up" : "chevron-down"}
-                                                        size={20}
-                                                        color="#666"
-                                                />
-                                        </TouchableOpacity>
-                                </View>
-
-                                <View style={styles.progressSection}>
-                                        <Text style={styles.progressTitle}>गावानुसार विपरिण प्रगती</Text>
-
-                                        <View style={styles.progressItem}>
-                                                <Text style={styles.progressLabel}>गाव अ</Text>
-                                                <View style={styles.progressBarContainer}>
-                                                        <View style={[styles.progressBar, { width: '60%' }]} />
-                                                </View>
-                                        </View>
-
-                                        <View style={styles.progressItem}>
-                                                <Text style={styles.progressLabel}>गाव ब</Text>
-                                                <View style={styles.progressBarContainer}>
-                                                        <View style={[styles.progressBar, { width: '45%' }]} />
-                                                </View>
-                                        </View>
-
-                                        <View style={styles.progressItem}>
-                                                <Text style={styles.progressLabel}>गाव क</Text>
-                                                <View style={styles.progressBarContainer}>
-                                                        <View style={[styles.progressBar, { width: '30%' }]} />
-                                                </View>
-                                        </View>
-
-                                        <View style={styles.progressItem}>
-                                                <Text style={styles.progressLabel}>गाव ड</Text>
-                                                <View style={styles.progressBarContainer}>
-                                                        <View style={[styles.progressBar, { width: '25%' }]} />
-                                                </View>
-                                        </View>
-                                </View>
-                        </ScrollView>
-                </SafeAreaView>
+                                ))}
+                        </View>
+                </ScrollView>
         );
 };
 
 const styles = StyleSheet.create({
         container: {
                 flex: 1,
+                padding: 16,
                 backgroundColor: '#f5f5f5',
         },
         header: {
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: 20,
-                backgroundColor: '#fff',
-                borderBottomWidth: 1,
-                borderBottomColor: '#e0e0e0',
-        },
-        headerTitle: {
-                fontSize: 18,
-                fontWeight: 'bold',
-        },
-        content: {
-                flex: 1,
-                padding: 20,
-        },
-        sectionTitle: {
-                fontSize: 20,
-                fontWeight: 'bold',
                 marginBottom: 20,
-                color: '#333',
         },
-        statsContainer: {
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                marginBottom: 15,
-        },
-        statCard: {
-                backgroundColor: '#e8f4fd',
-                padding: 20,
-                borderRadius: 12,
-                alignItems: 'center',
-                flex: 1,
-                marginHorizontal: 5,
-        },
-        statCardFull: {
-                backgroundColor: '#e8f4fd',
-                padding: 20,
-                borderRadius: 12,
-                alignItems: 'center',
-                marginBottom: 30,
-        },
-        statNumber: {
+        title: {
                 fontSize: 24,
                 fontWeight: 'bold',
-                color: '#333',
-                marginBottom: 5,
-        },
-        statLabel: {
-                fontSize: 14,
-                color: '#666',
                 textAlign: 'center',
+                color: '#333',
         },
-        dropdownContainer: {
-                marginBottom: 30,
+        controls: {
+                flexDirection: 'row',
+                marginBottom: 20,
+                gap: 10,
         },
-        dropdown: {
+        searchInput: {
+                flex: 1,
+                backgroundColor: '#fff',
+                borderRadius: 8,
+                padding: 12,
+                fontSize: 16,
+        },
+        filterButton: {
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                backgroundColor: '#e0e0e0',
+                borderRadius: 8,
+        },
+        activeFilter: {
+                backgroundColor: '#3498db',
+        },
+        filterButtonText: {
+                color: '#333',
+        },
+        usersList: {
+                gap: 12,
+        },
+        userCard: {
+                backgroundColor: '#fff',
+                borderRadius: 8,
+                padding: 16,
                 flexDirection: 'row',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                backgroundColor: '#fff',
-                padding: 15,
-                borderRadius: 8,
-                marginBottom: 15,
-                borderWidth: 1,
-                borderColor: '#e0e0e0',
         },
-        dropdownText: {
+        userPhone: {
                 fontSize: 16,
-                color: '#333',
         },
-        progressSection: {
-                backgroundColor: '#fff',
-                padding: 20,
-                borderRadius: 12,
-        },
-        progressTitle: {
-                fontSize: 16,
+        userStatus: {
+                color: '#3498db',
                 fontWeight: 'bold',
-                marginBottom: 20,
-                color: '#333',
-        },
-        progressItem: {
-                marginBottom: 15,
-        },
-        progressLabel: {
-                fontSize: 14,
-                fontWeight: '500',
-                marginBottom: 8,
-                color: '#007AFF',
-        },
-        progressBarContainer: {
-                height: 8,
-                backgroundColor: '#e0e0e0',
-                borderRadius: 4,
-                overflow: 'hidden',
-        },
-        progressBar: {
-                height: '100%',
-                backgroundColor: '#007AFF',
-                borderRadius: 4,
         },
 });
-
 
 export default AdminDashboardScreen;

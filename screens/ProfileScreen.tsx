@@ -1,163 +1,55 @@
-import React, { useState, useEffect } from 'react';
-import {
-        View,
-        Text,
-        StyleSheet,
-        ScrollView,
-        TouchableOpacity,
-        Image,
-        SafeAreaView,
-        StatusBar,
-        Alert,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { View, Text, TouchableOpacity, Alert } from 'react-native';
 import { getAuth, signOut } from 'firebase/auth';
+import { getDatabase, ref, update } from 'firebase/database';
 
 const ProfileScreen = ({ navigation }) => {
         const auth = getAuth();
-        const [user, setUser] = useState({
-                name: 'एजंट अॅलेक्स',
-                role: 'फोल्ड एजंट',
-                id: '९२३४५६०८७०',
-                email: 'agent.alex@example.com',
-                phone: '+९१ ९२३ ३४५६ ०८७०',
-                address: 'जालनगाव, सातपुड गाव क्रमांक ४२',
-        });
+        const db = getDatabase();
 
         const handleLogout = async () => {
-                Alert.alert(
-                        'लॉगआउट',
-                        'तुम्हाला खात्री आहे की तुम्ही लॉगआउट करू इच्छिता?',
-                        [
-                                {
-                                        text: 'रद्द करा',
-                                        style: 'cancel',
-                                },
-                                {
-                                        text: 'लॉगआउट',
-                                        style: 'destructive',
-                                        onPress: async () => {
-                                                try {
-                                                        await signOut(auth);
-                                                        navigation.reset({
-                                                                index: 0,
-                                                                routes: [{ name: 'Auth' }],
+                try {
+                        const user = auth.currentUser;
+                        if (user) {
+                                const logoutTime = new Date().toISOString();
+
+                                // Find the most recent session with no logout time
+                                const sessionsRef = ref(db, `users/${user.uid}/sessions`);
+                                const snapshot = await get(sessionsRef);
+
+                                if (snapshot.exists()) {
+                                        const sessions = Object.entries(snapshot.val()).reverse();
+                                        for (const [key, session] of sessions) {
+                                                if (!session.logoutTime) {
+                                                        await update(ref(db, `users/${user.uid}/sessions/${key}`), {
+                                                                logoutTime
                                                         });
-                                                } catch (error) {
-                                                        console.error('Logout error:', error);
-                                                        Alert.alert('त्रुटी', 'लॉगआउट करताना त्रुटी आली');
+                                                        break;
                                                 }
-                                        },
-                                },
-                        ]
-                );
-        };
+                                        }
+                                }
+                        }
 
-        const handleUpdateProfile = () => {
-                Alert.alert('प्रोफाइल अपडेट', 'प्रोफाइल अपडेट करण्याची कार्यक्षमता लवकरच येईल');
-        };
-
-        const handleChangePassword = () => {
-                Alert.alert('पासवर्ड बदला', 'पासवर्ड बदलण्याची कार्यक्षमता लवकरच येईल');
+                        await signOut(auth);
+                        navigation.reset({
+                                index: 0,
+                                routes: [{ name: 'Auth' }],
+                        });
+                } catch (error) {
+                        Alert.alert('Error', 'Logout failed');
+                }
         };
 
         return (
-                <SafeAreaView style={styles.container}>
-                        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-
-                        {/* Header */}
-                        <View style={styles.header}>
-                                <TouchableOpacity onPress={() => navigation.goBack()}>
-                                        <Ionicons name="arrow-back" size={24} color="#000" />
-                                </TouchableOpacity>
-                                <Text style={styles.headerTitle}>प्रोफाइल</Text>
-                                <View style={styles.headerSpacer} />
-                        </View>
-
-                        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                                {/* Profile Section */}
-                                <View style={styles.profileSection}>
-                                        <Image
-                                                source={require('../assets/profile-placeholder.png')}
-                                                style={styles.profileImage}
-                                        />
-                                        <Text style={styles.profileName}>{user.name}</Text>
-                                        <Text style={styles.profileRole}>{user.role}</Text>
-                                </View>
-
-                                {/* Personal Information */}
-                                <View style={styles.infoSection}>
-                                        <Text style={styles.sectionTitle}>वैयक्तिक माहिती</Text>
-
-                                        <View style={styles.infoItem}>
-                                                <View style={styles.infoIcon}>
-                                                        <Ionicons name="mail-outline" size={20} color="#666" />
-                                                </View>
-                                                <View style={styles.infoContent}>
-                                                        <Text style={styles.infoLabel}>ईमेल</Text>
-                                                        <Text style={styles.infoValue}>{user.email}</Text>
-                                                </View>
-                                        </View>
-
-                                        <View style={styles.infoItem}>
-                                                <View style={styles.infoIcon}>
-                                                        <Ionicons name="call-outline" size={20} color="#666" />
-                                                </View>
-                                                <View style={styles.infoContent}>
-                                                        <Text style={styles.infoLabel}>फोन</Text>
-                                                        <Text style={styles.infoValue}>{user.phone}</Text>
-                                                </View>
-                                        </View>
-
-                                        <View style={styles.infoItem}>
-                                                <View style={styles.infoIcon}>
-                                                        <Ionicons name="location-outline" size={20} color="#666" />
-                                                </View>
-                                                <View style={styles.infoContent}>
-                                                        <Text style={styles.infoLabel}>पत्ता</Text>
-                                                        <Text style={styles.infoValue}>{user.address}</Text>
-                                                </View>
-                                        </View>
-                                </View>
-
-                                {/* Account Actions */}
-                                <View style={styles.actionsSection}>
-                                        <Text style={styles.sectionTitle}>खाते सेटिंग्ज</Text>
-
-                                        <TouchableOpacity
-                                                style={styles.actionItem}
-                                                onPress={handleUpdateProfile}
-                                        >
-                                                <View style={styles.actionIcon}>
-                                                        <Ionicons name="person-outline" size={20} color="#666" />
-                                                </View>
-                                                <Text style={styles.actionText}>प्रोफाइल अपडेट करा</Text>
-                                                <Ionicons name="chevron-forward" size={16} color="#ccc" />
-                                        </TouchableOpacity>
-
-                                        <TouchableOpacity
-                                                style={styles.actionItem}
-                                                onPress={handleChangePassword}
-                                        >
-                                                <View style={styles.actionIcon}>
-                                                        <Ionicons name="lock-closed-outline" size={20} color="#666" />
-                                                </View>
-                                                <Text style={styles.actionText}>पासवर्ड बदला</Text>
-                                                <Ionicons name="chevron-forward" size={16} color="#ccc" />
-                                        </TouchableOpacity>
-                                </View>
-
-                                {/* Logout Button */}
-                                <TouchableOpacity
-                                        style={styles.logoutButton}
-                                        onPress={handleLogout}
-                                >
-                                        <Text style={styles.logoutButtonText}>लॉगआउट</Text>
-                                </TouchableOpacity>
-                        </ScrollView>
-                </SafeAreaView>
+                <View>
+                        <TouchableOpacity onPress={handleLogout}>
+                                <Text>Logout</Text>
+                        </TouchableOpacity>
+                </View>
         );
 };
+
+export default ProfileScreen;
 
 const styles = StyleSheet.create({
         container: {
