@@ -15,7 +15,7 @@ import {
 } from "react-native"
 import { signInWithEmailAndPassword } from "firebase/auth"
 import { getAuth } from "firebase/auth"
-import { getDatabase, ref, push, set, update } from "firebase/database"
+import { getDatabase, ref, push, set, update, get } from "firebase/database"
 
 const LoginScreen = ({ navigation }) => {
         const [mobileNumber, setMobileNumber] = useState("")
@@ -25,7 +25,7 @@ const LoginScreen = ({ navigation }) => {
         const auth = getAuth()
         const database = getDatabase()
 
-        const createUserSession = async (userId, phone) => {
+        const createUserSession = async (userId, phone, actualUserType) => {
                 try {
                         const sessionId = push(ref(database, `users/${userId}/sessions`)).key
                         const loginTime = new Date().toISOString()
@@ -41,7 +41,7 @@ const LoginScreen = ({ navigation }) => {
                                 phone,
                                 currentSession: sessionId,
                                 lastLogin: loginTime,
-                                userType: userType, // Store user type
+                                userType: actualUserType, // Use the actual user type from database
                         })
 
                         return sessionId
@@ -51,25 +51,89 @@ const LoginScreen = ({ navigation }) => {
                 }
         }
 
+        const validateUserRole = async (userId, selectedUserType) => {
+                try {
+                        const userRef = ref(database, `users/${userId}`)
+                        const snapshot = await get(userRef)
+
+                        if (snapshot.exists()) {
+                                const userData = snapshot.val()
+                                const actualUserType = userData.userType
+
+                                // If user selected admin but their role is not admin
+                                if (selectedUserType === "प्रशासन" && actualUserType !== "प्रशासन") {
+                                        return {
+                                                isValid: false,
+                                                message: "तुम्ही प्रशासक नाही. कृपया योग्य प्रशासक क्रेडेंशियल्सने लॉगिन करा.",
+                                                actualUserType,
+                                        }
+                                }
+
+                                // If user selected field agent but their role is admin
+                                if (selectedUserType === "फील्ड एजंट" && actualUserType === "प्रशासन") {
+                                        return {
+                                                isValid: false,
+                                                message: "तुम्ही प्रशासक आहात. कृपया प्रशासन म्हणून लॉगिन करा.",
+                                                actualUserType,
+                                        }
+                                }
+
+                                return {
+                                        isValid: true,
+                                        actualUserType,
+                                }
+                        } else {
+                                return {
+                                        isValid: false,
+                                        message: "वापरकर्ता सापडला नाही",
+                                        actualUserType: null,
+                                }
+                        }
+                } catch (error) {
+                        console.error("Error validating user role:", error)
+                        return {
+                                isValid: false,
+                                message: "वापरकर्ता माहिती तपासताना त्रुटी आली",
+                                actualUserType: null,
+                        }
+                }
+        }
+
         const handleLogin = async () => {
                 if (!mobileNumber || !otp) {
                         Alert.alert("त्रुटी", "कृपया मोबाईल नंबर आणि OTP भरा")
                         return
                 }
 
+                if (mobileNumber.length !== 10) {
+                        Alert.alert("त्रुटी", "कृपया वैध 10 अंकी मोबाईल नंबर भरा")
+                        return
+                }
+
                 setLoading(true)
                 try {
-                        // For demo purposes, using email/password auth
-                        // In production, implement OTP authentication
-                        const userCredential = await signInWithEmailAndPassword(auth, mobileNumber + "@gmail.com", "123456")
+                        // Create email from mobile number
+                        const email = `${mobileNumber}@gmail.com`
 
+                        // Sign in with Firebase Auth
+                        const userCredential = await signInWithEmailAndPassword(auth, email, otp)
                         const user = userCredential.user
 
-                        // Create session in database
-                        await createUserSession(user.uid, mobileNumber)
+                        // Validate user role
+                        const roleValidation = await validateUserRole(user.uid, userType)
 
-                        // Navigate based on user type using the correct screen names
-                        if (userType === "प्रशासन") {
+                        if (!roleValidation.isValid) {
+                                // Sign out the user since role validation failed
+                                await auth.signOut()
+                                Alert.alert("प्रवेश नाकारला", roleValidation.message)
+                                return
+                        }
+
+                        // Create session in database
+                        await createUserSession(user.uid, mobileNumber, roleValidation.actualUserType)
+
+                        // Navigate based on actual user type
+                        if (roleValidation.actualUserType === "प्रशासन") {
                                 // Reset navigation stack and go to Admin
                                 navigation.reset({
                                         index: 0,
@@ -84,7 +148,20 @@ const LoginScreen = ({ navigation }) => {
                         }
                 } catch (error) {
                         console.error("Login error:", error)
-                        Alert.alert("त्रुटी", "अवैध क्रेडेंशियल्स")
+
+                        let errorMessage = "लॉगिन करताना त्रुटी आली"
+
+                        if (error.code === "auth/user-not-found") {
+                                errorMessage = "हा मोबाईल नंबर नोंदणीकृत नाही. कृपया प्रथम नोंदणी करा."
+                        } else if (error.code === "auth/wrong-password") {
+                                errorMessage = "चुकीचा OTP/पासवर्ड"
+                        } else if (error.code === "auth/invalid-email") {
+                                errorMessage = "अवैध मोबाईल नंबर"
+                        } else if (error.code === "auth/too-many-requests") {
+                                errorMessage = "खूप जास्त प्रयत्न. कृपया काही वेळानंतर प्रयत्न करा."
+                        }
+
+                        Alert.alert("त्रुटी", errorMessage)
                 } finally {
                         setLoading(false)
                 }
@@ -108,6 +185,7 @@ const LoginScreen = ({ navigation }) => {
                                                 style={[styles.userTypeButton, userType === "फील्ड एजंट" && styles.userTypeButtonActive]}
                                                 onPress={() => setUserType("फील्ड एजंट")}
                                                 activeOpacity={0.7}
+                                                disabled={loading}
                                         >
                                                 <Text style={[styles.userTypeText, userType === "फील्ड एजंट" && styles.userTypeTextActive]}>फील्ड एजंट</Text>
                                         </TouchableOpacity>
@@ -116,6 +194,7 @@ const LoginScreen = ({ navigation }) => {
                                                 style={[styles.userTypeButton, userType === "प्रशासन" && styles.userTypeButtonActive]}
                                                 onPress={() => setUserType("प्रशासन")}
                                                 activeOpacity={0.7}
+                                                disabled={loading}
                                         >
                                                 <Text style={[styles.userTypeText, userType === "प्रशासन" && styles.userTypeTextActive]}>प्रशासन</Text>
                                         </TouchableOpacity>
@@ -136,12 +215,11 @@ const LoginScreen = ({ navigation }) => {
 
                                         <TextInput
                                                 style={styles.input}
-                                                placeholder="ओटीपी"
+                                                placeholder="पासवर्ड"
                                                 placeholderTextColor="#9CA3AF"
                                                 value={otp}
                                                 onChangeText={setOtp}
-                                                keyboardType="numeric"
-                                                maxLength={6}
+                                                secureTextEntry
                                                 editable={!loading}
                                         />
                                 </View>
@@ -165,6 +243,13 @@ const LoginScreen = ({ navigation }) => {
                                 >
                                         <Text style={styles.registerButtonText}>खाते नाहीये का? आता नोंदणी करा.</Text>
                                 </TouchableOpacity>
+
+                                {/* Demo Credentials Info */}
+                                <View style={styles.demoInfo}>
+                                        <Text style={styles.demoTitle}>डेमो क्रेडेंशियल्स:</Text>
+                                        <Text style={styles.demoText}>फील्ड एजंट: 1234567890 / 123456</Text>
+                                        <Text style={styles.demoText}>प्रशासन: 9876543210 / 123456</Text>
+                                </View>
                         </View>
                 </SafeAreaView>
         )
@@ -277,11 +362,30 @@ const styles = StyleSheet.create({
                 paddingVertical: 16,
                 alignItems: "center",
                 justifyContent: "center",
+                marginBottom: 20,
         },
         registerButtonText: {
                 color: "#ffffff",
                 fontSize: 16,
                 fontWeight: "500",
+        },
+        demoInfo: {
+                backgroundColor: "#F0F9FF",
+                borderRadius: 12,
+                padding: 16,
+                borderLeftWidth: 4,
+                borderLeftColor: "#3B82F6",
+        },
+        demoTitle: {
+                fontSize: 14,
+                fontWeight: "600",
+                color: "#1F2937",
+                marginBottom: 8,
+        },
+        demoText: {
+                fontSize: 12,
+                color: "#6B7280",
+                marginBottom: 4,
         },
 })
 
