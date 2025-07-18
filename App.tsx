@@ -5,7 +5,9 @@ import { NavigationContainer } from "@react-navigation/native"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { Ionicons } from "@expo/vector-icons"
-import { onAuthStateChanged } from "firebase/auth"
+import { onAuthStateChanged, signOut } from "firebase/auth"
+import { AppState } from "react-native"
+import { getDatabase, ref, update, get } from "firebase/database"
 import { auth } from "./firebaseConfig"
 import { VoterProvider } from "./contexts/VoterContext"
 
@@ -96,6 +98,53 @@ function AppNavigator() {
 export default function App() {
         const [user, setUser] = useState(null)
         const [loading, setLoading] = useState(true)
+        const database = getDatabase()
+
+        // Handle app state changes for automatic logout
+        useEffect(() => {
+                const handleAppStateChange = async (nextAppState) => {
+                        if (nextAppState === "background" || nextAppState === "inactive") {
+                                // App is going to background or becoming inactive
+                                const currentUser = auth.currentUser
+                                if (currentUser) {
+                                        try {
+                                                // Get current user data
+                                                const userRef = ref(database, `users/${currentUser.uid}`)
+                                                const snapshot = await get(userRef)
+
+                                                if (snapshot.exists()) {
+                                                        const userData = snapshot.val()
+                                                        if (userData.currentSession) {
+                                                                const logoutTime = new Date().toISOString()
+
+                                                                // Update current session with logout time
+                                                                await update(ref(database, `users/${currentUser.uid}/sessions/${userData.currentSession}`), {
+                                                                        logoutTime,
+                                                                })
+
+                                                                // Update user info
+                                                                await update(ref(database, `users/${currentUser.uid}`), {
+                                                                        currentSession: null,
+                                                                        lastLogout: logoutTime,
+                                                                })
+                                                        }
+                                                }
+
+                                                // Sign out the user
+                                                await signOut(auth)
+                                        } catch (error) {
+                                                console.error("Auto logout error:", error)
+                                        }
+                                }
+                        }
+                }
+
+                const subscription = AppState.addEventListener("change", handleAppStateChange)
+
+                return () => {
+                        subscription?.remove()
+                }
+        }, [])
 
         useEffect(() => {
                 const unsubscribe = onAuthStateChanged(auth, (user) => {

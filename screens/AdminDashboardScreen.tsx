@@ -5,93 +5,302 @@ import {
         View,
         Text,
         StyleSheet,
+        SafeAreaView,
         TouchableOpacity,
         ScrollView,
-        TextInput,
-        FlatList,
         ActivityIndicator,
-        SafeAreaView,
         StatusBar,
+        Alert,
+        Image,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import { getDatabase, ref, onValue } from "firebase/database"
-import { getAuth, signOut } from "firebase/auth"
-import { format, parseISO, isToday, isYesterday, differenceInMinutes } from "date-fns"
+import { ref, onValue, off, get, update } from "firebase/database"
+import { database, auth } from "../firebaseConfig"
+import { signOut } from "firebase/auth"
+import type { User, UsersData } from "./types"
 
-type Session = {
-        id: string
-        loginTime: string
-        logoutTime: string | null
-}
-
-type User = {
-        uid: string
-        phone: string
-        currentSession: string | null
-        lastLogin?: string
-        lastLogout?: string
-        userType?: string
-        sessions: Record<string, Session>
+// Same village data structure as DashboardScreen
+const VILLAGE_DATA = {
+        दारुंब्रे: {
+                "यादी भाग ३८७": [""],
+        },
+        इंदुरी: {
+                "भाग - २२३": [
+                        "इंदुरी गावठाण इंदुरी",
+                        "इंदुरी बाजारपेठ इंदुरी",
+                        "काशिद चाळ इंदुरी",
+                        "इंदुरी बाजारपेठ मागील भाग इंदुरी",
+                        "खांदवे चाळ इंदुरी",
+                        "शिदीया मागील भाग इंदुरी",
+                        "विष्णु मंदीर इंदुरी",
+                        "पवारवाडा इंदुरी",
+                        "काशिद मळा इंदुरी",
+                        "काशिद विट भट्टी इंदुरी",
+                        "राऊत्त विट भट्टी इंदुरी",
+                        "गावठाण इंदुरी",
+                ],
+                "भाग - २२४": ["गावठाण इंदुरी", "सुतार वस्ती गावठाण इंदुरी", "गायकवाड वाडा गावठाण इंदुरी", "कॅडबरी वस्ती इंदुरी"],
+                "भाग - २२५": ["ठाकरवाडी इंदुरी", "पुनर्वसन वसाहत इंदुरी", "पानसरे वस्ती इंदुरी", "कुंडमळा इंदुरी"],
+        },
+        जांबवडे: {
+                "यादी भाग १९९": [""],
+        },
+        मालवाडी: {
+                "यादी भाग १९०": [""],
+                "यादी भाग १९१": [""],
+        },
+        "नवलाख उंब्रे": {
+                "यादी भाग ११८": [""],
+        },
+        साळुंब्रे: {
+                "यादी भाग ३८३": [""],
+        },
+        शिरगाव: {
+                "यादी भाग ३५१": [""],
+        },
+        सुदुंब्रे: {
+                "यादी भाग २००": [""],
+        },
 }
 
 const AdminDashboardScreen = ({ navigation }) => {
-        const [usersData, setUsersData] = useState<Record<string, User>>({})
+        const [users, setUsers] = useState<UsersData>({})
         const [loading, setLoading] = useState(true)
-        const [searchTerm, setSearchTerm] = useState("")
-        const [activeOnly, setActiveOnly] = useState(false)
         const [selectedUser, setSelectedUser] = useState<User | null>(null)
-        const database = getDatabase()
-        const auth = getAuth()
+        const [currentView, setCurrentView] = useState<"dashboard" | "users">("dashboard")
+
+        // Dashboard state
+        const [expandedSections, setExpandedSections] = useState({
+                village: false,
+                division: false,
+        })
+        const [selectedVillage, setSelectedVillage] = useState<string | null>(null)
+        const [selectedBhag, setSelectedBhag] = useState<string | null>(null)
+        const [selectedVibhag, setSelectedVibhag] = useState<string | null>(null)
+        const [stats, setStats] = useState({
+                totalVoters: 0,
+                slipIssued: 0,
+                votingDone: 0,
+        })
 
         useEffect(() => {
                 const usersRef = ref(database, "users")
+
                 const unsubscribe = onValue(usersRef, (snapshot) => {
-                        if (snapshot.exists()) {
-                                const data = snapshot.val()
-                                const processedData: Record<string, User> = {}
-
-                                Object.entries(data).forEach(([uid, userData]: [string, any]) => {
-                                        processedData[uid] = {
-                                                uid,
-                                                phone: userData.phone || "N/A",
-                                                currentSession: userData.currentSession || null,
-                                                lastLogin: userData.lastLogin,
-                                                lastLogout: userData.lastLogout,
-                                                userType: userData.userType || "फील्ड एजंट",
-                                                sessions: userData.sessions || {},
+                        const data = snapshot.val()
+                        if (data) {
+                                // Filter to show only field agents (फील्ड एजंट)
+                                const filteredUsers = Object.keys(data).reduce((acc, userId) => {
+                                        const user = data[userId]
+                                        if (user.userType === "फील्ड एजंट") {
+                                                acc[userId] = user
                                         }
-                                })
-
-                                setUsersData(processedData)
+                                        return acc
+                                }, {})
+                                setUsers(filteredUsers)
                         }
                         setLoading(false)
                 })
 
-                return () => unsubscribe()
+                return () => off(usersRef, "value", unsubscribe)
         }, [])
 
-        const handleLogout = async () => {
-                try {
-                        await signOut(auth)
-                        navigation.reset({
-                                index: 0,
-                                routes: [{ name: "Auth" }],
+        // Function to calculate statistics from Firebase data
+        const calculateStats = (village: string, bhag: string, vibhag: string) => {
+                const villagesRef = ref(database, "villages")
+
+                onValue(villagesRef, (snapshot) => {
+                        const data = snapshot.val()
+                        if (data && data[village] && data[village][bhag] && data[village][bhag][vibhag]) {
+                                const voterList = data[village][bhag][vibhag]["मतदार_यादी"] || {}
+
+                                let totalVoters = 0
+                                let slipIssued = 0
+                                let votingDone = 0
+
+                                Object.values(voterList).forEach((voter: any) => {
+                                        totalVoters++
+                                        if (voter["स्लिप_जारी_केली"] === true || voter["स्लिप जारी केली"] === true) {
+                                                slipIssued++
+                                        }
+                                        if (voter["मतदान_झाले"] === true || voter["मतदान झाले"] === true) {
+                                                votingDone++
+                                        }
+                                })
+
+                                setStats({
+                                        totalVoters,
+                                        slipIssued,
+                                        votingDone,
+                                })
+                        } else {
+                                setStats({
+                                        totalVoters: 0,
+                                        slipIssued: 0,
+                                        votingDone: 0,
+                                })
+                        }
+                })
+        }
+
+        // Calculate overall statistics when no specific area is selected
+        const calculateOverallStats = () => {
+                const villagesRef = ref(database, "villages")
+
+                onValue(villagesRef, (snapshot) => {
+                        const data = snapshot.val()
+                        let totalVoters = 0
+                        let slipIssued = 0
+                        let votingDone = 0
+
+                        if (data) {
+                                Object.values(data).forEach((village: any) => {
+                                        Object.values(village).forEach((bhag: any) => {
+                                                Object.values(bhag).forEach((vibhag: any) => {
+                                                        const voterList = vibhag["मतदार_यादी"] || {}
+                                                        Object.values(voterList).forEach((voter: any) => {
+                                                                totalVoters++
+                                                                if (voter["स्लिप_जारी_केली"] === true || voter["स्लिप जारी केली"] === true) {
+                                                                        slipIssued++
+                                                                }
+                                                                if (voter["मतदान_झाले"] === true || voter["मतदान झाले"] === true) {
+                                                                        votingDone++
+                                                                }
+                                                        })
+                                                })
+                                        })
+                                })
+                        }
+
+                        setStats({
+                                totalVoters,
+                                slipIssued,
+                                votingDone,
                         })
-                } catch (error) {
-                        console.error("Logout error:", error)
+                })
+        }
+
+        // Update stats when selection changes
+        useEffect(() => {
+                if (selectedVillage && selectedBhag && selectedVibhag) {
+                        calculateStats(selectedVillage, selectedBhag, selectedVibhag)
+                } else {
+                        calculateOverallStats()
+                }
+        }, [selectedVillage, selectedBhag, selectedVibhag])
+
+        const handleLogout = () => {
+                Alert.alert("लॉगआउट", "तुम्ही खरोखर लॉगआउट करू इच्छिता?", [
+                        {
+                                text: "रद्द करा",
+                                style: "cancel",
+                        },
+                        {
+                                text: "लॉगआउट",
+                                style: "destructive",
+                                onPress: async () => {
+                                        try {
+                                                const currentUser = auth.currentUser
+                                                if (currentUser) {
+                                                        // Get current user data to check for active session
+                                                        const userRef = ref(database, `users/${currentUser.uid}`)
+                                                        const snapshot = await get(userRef)
+
+                                                        if (snapshot.exists()) {
+                                                                const userData = snapshot.val()
+                                                                if (userData.currentSession) {
+                                                                        const logoutTime = new Date().toISOString()
+
+                                                                        // Update current session with logout time
+                                                                        await update(ref(database, `users/${currentUser.uid}/sessions/${userData.currentSession}`), {
+                                                                                logoutTime,
+                                                                        })
+
+                                                                        // Update user info
+                                                                        await update(ref(database, `users/${currentUser.uid}`), {
+                                                                                currentSession: null,
+                                                                                lastLogout: logoutTime,
+                                                                        })
+                                                                }
+                                                        }
+                                                }
+
+                                                await signOut(auth)
+                                                navigation.reset({
+                                                        index: 0,
+                                                        routes: [{ name: "Auth" }],
+                                                })
+                                        } catch (error) {
+                                                console.error("Logout error:", error)
+                                        }
+                                },
+                        },
+                ])
+        }
+
+        const toggleSection = (section: "village" | "division") => {
+                setExpandedSections((prev) => ({
+                        ...prev,
+                        [section]: !prev[section],
+                }))
+        }
+
+        const handleVillageSelect = (village: string) => {
+                setSelectedVillage(village)
+                setSelectedBhag(null)
+                setSelectedVibhag(null)
+
+                const bhags = Object.keys(VILLAGE_DATA[village])
+                if (bhags.length === 1) {
+                        setSelectedBhag(bhags[0])
+                        setExpandedSections({
+                                village: false,
+                                division: true,
+                        })
+                } else {
+                        setExpandedSections({
+                                village: false,
+                                division: false,
+                        })
                 }
         }
 
-        const filteredUsers = Object.entries(usersData).filter(([userId, user]) => {
-                const matchesSearch = user.phone.includes(searchTerm) || userId.includes(searchTerm)
-                const matchesActive = !activeOnly || user.currentSession !== null
-                return matchesSearch && matchesActive
-        })
+        const handleBhagSelect = (bhag: string) => {
+                setSelectedBhag(bhag)
+                setSelectedVibhag(null)
+                setExpandedSections({
+                        village: false,
+                        division: false,
+                })
+        }
 
-        const formatDateTime = (isoString?: string) => {
-                if (!isoString) return "कधीच नाही"
-                const date = new Date(isoString)
+        const handleVibhagSelect = (vibhag: string) => {
+                setSelectedVibhag(vibhag)
+        }
+
+        const clearSelection = () => {
+                setSelectedVillage(null)
+                setSelectedBhag(null)
+                setSelectedVibhag(null)
+                setExpandedSections({
+                        village: false,
+                        division: false,
+                })
+        }
+
+        const getUserStats = () => {
+                const userList = Object.values(users)
+                const totalUsers = userList.length
+                const activeUsers = userList.filter((user) => user.currentSession).length
+
+                return { totalUsers, activeUsers }
+        }
+
+        const formatDate = (dateString: string) => {
+                if (!dateString) return "N/A"
+                const date = new Date(dateString)
                 return date.toLocaleString("mr-IN", {
+                        year: "numeric",
                         month: "short",
                         day: "numeric",
                         hour: "2-digit",
@@ -99,45 +308,296 @@ const AdminDashboardScreen = ({ navigation }) => {
                 })
         }
 
-        const getTotalActiveUsers = () => {
-                return Object.values(usersData).filter((user) => user.currentSession).length
+        const getSessionHistory = (user: User) => {
+                if (!user.sessions) return []
+                return Object.values(user.sessions).sort(
+                        (a, b) => new Date(b.loginTime).getTime() - new Date(a.loginTime).getTime(),
+                )
         }
 
-        const getTotalUsers = () => {
-                return Object.keys(usersData).length
-        }
+        const renderUserDetail = () => {
+                if (!selectedUser) return null
 
-        const renderUserItem = ({ item }: { item: [string, User] }) => {
-                const [userId, user] = item
-                const isActive = user.currentSession !== null
+                const sessionHistory = getSessionHistory(selectedUser)
 
                 return (
-                        <TouchableOpacity style={styles.userCard} onPress={() => setSelectedUser(user)}>
-                                <View style={styles.userInfo}>
-                                        <View style={styles.userHeader}>
-                                                <Text style={styles.userPhone}>{user.phone}</Text>
-                                                <View style={styles.userTypeAndStatus}>
-                                                        <Text style={styles.userTypeText}>{user.userType}</Text>
-                                                        <View style={[styles.statusIndicator, { backgroundColor: isActive ? "#4CAF50" : "#FF5722" }]} />
+                        <View style={styles.userDetailContainer}>
+                                <View style={styles.userDetailHeader}>
+                                        <TouchableOpacity style={styles.backButton} onPress={() => setSelectedUser(null)}>
+                                                <Ionicons name="arrow-back" size={20} color="#fff" />
+                                        </TouchableOpacity>
+                                        <Text style={styles.userDetailTitle}>फील्ड एजंट तपशील</Text>
+                                </View>
+
+                                <ScrollView style={styles.userDetailContent}>
+                                        <View style={styles.userInfoCard}>
+                                                <Text style={styles.userDetailName}>{selectedUser.fullName}</Text>
+                                                <Text style={styles.userDetailPhone}>{selectedUser.phone}</Text>
+                                                <View style={styles.userTypeContainer}>
+                                                        <Text style={[styles.userTypeBadge, styles.agentBadge]}>{selectedUser.userType}</Text>
+                                                </View>
+
+                                                <View style={styles.statusRow}>
+                                                        <Text style={styles.statusLabel}>स्थिती:</Text>
+                                                        <Text
+                                                                style={[styles.statusValue, selectedUser.currentSession ? styles.activeStatus : styles.inactiveStatus]}
+                                                        >
+                                                                {selectedUser.currentSession ? "सक्रिय" : "निष्क्रिय"}
+                                                        </Text>
+                                                </View>
+
+                                                <View style={styles.statusRow}>
+                                                        <Text style={styles.statusLabel}>��ेवटचे लॉगिन:</Text>
+                                                        <Text style={styles.statusValue}>{formatDate(selectedUser.lastLogin)}</Text>
+                                                </View>
+
+                                                <View style={styles.statusRow}>
+                                                        <Text style={styles.statusLabel}>शेवटचे लॉगआउट:</Text>
+                                                        <Text style={styles.statusValue}>{formatDate(selectedUser.lastLogout)}</Text>
                                                 </View>
                                         </View>
-                                        <Text style={styles.userId}>ID: {userId.substring(0, 8)}...</Text>
-                                        <View style={styles.sessionInfo}>
-                                                <Text style={styles.sessionText}>शेवटचे लॉगिन: {formatDateTime(user.lastLogin)}</Text>
-                                                <Text style={styles.sessionText}>शेवटचे लॉगआउट: {formatDateTime(user.lastLogout)}</Text>
+
+                                        <View style={styles.sessionHistoryCard}>
+                                                <Text style={styles.sectionTitle}>सेशन इतिहास</Text>
+                                                {sessionHistory.length > 0 ? (
+                                                        sessionHistory.map((session, index) => (
+                                                                <View key={session.id || index} style={styles.sessionItem}>
+                                                                        <View style={styles.sessionHeader}>
+                                                                                <Text style={styles.sessionNumber}>सेशन #{sessionHistory.length - index}</Text>
+                                                                                <Text
+                                                                                        style={[
+                                                                                                styles.sessionStatus,
+                                                                                                session.logoutTime ? styles.completedSession : styles.activeSession,
+                                                                                        ]}
+                                                                                >
+                                                                                        {session.logoutTime ? "पूर्ण" : "सक्रिय"}
+                                                                                </Text>
+                                                                        </View>
+                                                                        <Text style={styles.sessionTime}>लॉगिन: {formatDate(session.loginTime)}</Text>
+                                                                        {session.logoutTime && (
+                                                                                <Text style={styles.sessionTime}>लॉगआउट: {formatDate(session.logoutTime)}</Text>
+                                                                        )}
+                                                                        {session.logoutTime && (
+                                                                                <Text style={styles.sessionDuration}>
+                                                                                        कालावधी:{" "}
+                                                                                        {Math.round(
+                                                                                                (new Date(session.logoutTime).getTime() - new Date(session.loginTime).getTime()) / (1000 * 60),
+                                                                                        )}{" "}
+                                                                                        मिनिटे
+                                                                                </Text>
+                                                                        )}
+                                                                </View>
+                                                        ))
+                                                ) : (
+                                                        <Text style={styles.noDataText}>कोणताही सेशन इतिहास उपलब्ध नाही</Text>
+                                                )}
                                         </View>
+                                </ScrollView>
+                        </View>
+                )
+        }
+
+        const renderUserManagement = () => {
+                const userStats = getUserStats()
+
+                return (
+                        <View style={styles.container}>
+                                <StatusBar backgroundColor="#f5f5f5" barStyle="dark-content" />
+
+                                {/* Header */}
+                                <View style={styles.header}>
+                                        <TouchableOpacity onPress={() => setCurrentView("dashboard")}>
+                                                <Ionicons name="arrow-back" size={24} color="#000" />
+                                        </TouchableOpacity>
+                                        <Text style={styles.headerTitle}>फील्ड एजंट व्यवस्थापन</Text>
+                                        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+                                                <Ionicons name="log-out-outline" size={20} color="#fff" />
+                                        </TouchableOpacity>
                                 </View>
-                                <Ionicons name="chevron-forward" size={20} color="#666" />
-                        </TouchableOpacity>
+
+                                <ScrollView style={styles.content}>
+                                        {/* Stats Cards */}
+                                        <View style={styles.statsContainer}>
+                                                <View style={styles.statCard}>
+                                                        <Text style={styles.statNumber}>{userStats.totalUsers}</Text>
+                                                        <Text style={styles.statLabel}>एकूण फील्ड एजंट</Text>
+                                                </View>
+
+                                                <View style={styles.statCard}>
+                                                        <Text style={styles.statNumber}>{userStats.activeUsers}</Text>
+                                                        <Text style={styles.statLabel}>सक्रिय एजंट</Text>
+                                                </View>
+                                        </View>
+
+                                        {/* Users List */}
+                                        <View style={styles.usersSection}>
+                                                <Text style={styles.sectionTitle}>फील्ड एजंट यादी</Text>
+
+                                                {Object.entries(users).map(([userId, user]) => (
+                                                        <TouchableOpacity key={userId} style={styles.userCard} onPress={() => setSelectedUser(user)}>
+                                                                <View style={styles.userInfo}>
+                                                                        <Text style={styles.userName}>{user.fullName}</Text>
+                                                                        <Text style={styles.userPhone}>{user.phone}</Text>
+                                                                        <Text style={[styles.userType, styles.agentType]}>{user.userType}</Text>
+                                                                </View>
+
+                                                                <View style={styles.userStatus}>
+                                                                        <View
+                                                                                style={[
+                                                                                        styles.statusIndicator,
+                                                                                        user.currentSession ? styles.activeIndicator : styles.inactiveIndicator,
+                                                                                ]}
+                                                                        />
+                                                                        <Text style={styles.statusText}>{user.currentSession ? "सक्रिय" : "निष्क्रिय"}</Text>
+                                                                        <Ionicons name="chevron-forward" size={16} color="#666" />
+                                                                </View>
+                                                        </TouchableOpacity>
+                                                ))}
+
+                                                {Object.keys(users).length === 0 && (
+                                                        <View style={styles.emptyContainer}>
+                                                                <Text style={styles.emptyText}>कोणतेही फील्ड एजंट सापडले नाहीत</Text>
+                                                        </View>
+                                                )}
+                                        </View>
+                                </ScrollView>
+                        </View>
+                )
+        }
+
+        const renderDashboard = () => {
+                const hasMultipleBhags = selectedVillage && Object.keys(VILLAGE_DATA[selectedVillage]).length > 1
+                const hasVibhags =
+                        selectedBhag &&
+                        selectedVillage &&
+                        VILLAGE_DATA[selectedVillage][selectedBhag] &&
+                        VILLAGE_DATA[selectedVillage][selectedBhag].length > 0
+
+                return (
+                        <View style={styles.container}>
+                                <StatusBar backgroundColor="#f5f5f5" barStyle="dark-content" />
+
+                                {/* Header */}
+                                <View style={styles.header}>
+                                        <Text style={styles.headerTitle}>प्रशासन डैशबोर्ड</Text>
+                                        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+                                                <Ionicons name="log-out-outline" size={20} color="#fff" />
+                                        </TouchableOpacity>
+                                </View>
+
+                                <ScrollView style={styles.content}>
+                                        {/* Profile Section */}
+                                        <View style={styles.profileSection}>
+                                                <Image source={require("../assets/profile-placeholder.png")} style={styles.profileImage} />
+                                                <View style={styles.profileInfo}>
+                                                        <Text style={styles.profileName}>प्रशासक</Text>
+                                                        <Text style={styles.profileRole}>प्रशासन</Text>
+                                                </View>
+                                        </View>
+
+                                        {/* Stats Cards */}
+                                        <View style={styles.statsContainer}>
+                                                <View style={styles.statCard}>
+                                                        <Text style={styles.statNumber}>{stats.totalVoters}</Text>
+                                                        <Text style={styles.statLabel}>एकूण मतदार</Text>
+                                                </View>
+
+                                                <View style={styles.statCard}>
+                                                        <Text style={styles.statNumber}>{stats.slipIssued}</Text>
+                                                        <Text style={styles.statLabel}>स्लिप जारी केली</Text>
+                                                </View>
+                                        </View>
+
+                                        <View style={[styles.statCard, { width: "100%" }]}>
+                                                <Text style={styles.statNumber}>{stats.votingDone}</Text>
+                                                <Text style={styles.statLabel}>मतदान झाले</Text>
+                                        </View>
+
+                                        {/* Area Selection */}
+                                        <View style={styles.selectionHeader}>
+                                                <Text style={styles.selectionTitle}>क्षेत्र निवडा (वैकल्पिक)</Text>
+                                                {(selectedVillage || selectedBhag || selectedVibhag) && (
+                                                        <TouchableOpacity style={styles.clearButton} onPress={clearSelection}>
+                                                                <Text style={styles.clearButtonText}>साफ करा</Text>
+                                                        </TouchableOpacity>
+                                                )}
+                                        </View>
+
+                                        {/* Village Dropdown */}
+                                        <View style={styles.expandableSection}>
+                                                <TouchableOpacity style={styles.expandableHeader} onPress={() => toggleSection("village")}>
+                                                        <Text style={styles.expandableTitle}>{selectedVillage ? selectedVillage : "गाव निवडा"}</Text>
+                                                        <Ionicons name={expandedSections.village ? "chevron-up" : "chevron-down"} size={20} color="#000" />
+                                                </TouchableOpacity>
+
+                                                {expandedSections.village && (
+                                                        <View style={styles.dropdownContent}>
+                                                                {Object.keys(VILLAGE_DATA).map((village) => (
+                                                                        <TouchableOpacity
+                                                                                key={village}
+                                                                                style={styles.dropdownItem}
+                                                                                onPress={() => handleVillageSelect(village)}
+                                                                        >
+                                                                                <Text style={styles.dropdownItemText}>{village}</Text>
+                                                                        </TouchableOpacity>
+                                                                ))}
+                                                        </View>
+                                                )}
+                                        </View>
+
+                                        {/* Bhag Dropdown */}
+                                        {hasMultipleBhags && selectedVillage && (
+                                                <View style={styles.expandableSection}>
+                                                        <TouchableOpacity style={styles.expandableHeader} onPress={() => toggleSection("division")}>
+                                                                <Text style={styles.expandableTitle}>{selectedBhag ? selectedBhag : "भाग निवडा"}</Text>
+                                                                <Ionicons name={expandedSections.division ? "chevron-up" : "chevron-down"} size={20} color="#000" />
+                                                        </TouchableOpacity>
+
+                                                        {expandedSections.division && (
+                                                                <View style={styles.dropdownContent}>
+                                                                        {Object.keys(VILLAGE_DATA[selectedVillage]).map((bhag) => (
+                                                                                <TouchableOpacity key={bhag} style={styles.dropdownItem} onPress={() => handleBhagSelect(bhag)}>
+                                                                                        <Text style={styles.dropdownItemText}>{bhag}</Text>
+                                                                                </TouchableOpacity>
+                                                                        ))}
+                                                                </View>
+                                                        )}
+                                                </View>
+                                        )}
+
+                                        {/* Vibhag Selection */}
+                                        {hasVibhags && (
+                                                <View style={styles.expandableSection}>
+                                                        <Text style={styles.vibhagLabel}>विभाग निवडा:</Text>
+                                                        {VILLAGE_DATA[selectedVillage][selectedBhag].map((vibhag) => (
+                                                                <TouchableOpacity
+                                                                        key={vibhag}
+                                                                        style={[styles.vibhagItem, selectedVibhag === vibhag && styles.vibhagItemSelected]}
+                                                                        onPress={() => handleVibhagSelect(vibhag)}
+                                                                >
+                                                                        <Text style={styles.vibhagItemText}>{vibhag}</Text>
+                                                                        {selectedVibhag === vibhag && <Ionicons name="checkmark" size={20} color="green" />}
+                                                                </TouchableOpacity>
+                                                        ))}
+                                                </View>
+                                        )}
+
+                                        {/* Manage Users Button */}
+                                        <TouchableOpacity style={styles.manageUsersButton} onPress={() => setCurrentView("users")}>
+                                                <Ionicons name="people-outline" size={24} color="#fff" />
+                                                <Text style={styles.manageUsersButtonText}>फील्ड एजंट व्यवस्थापन</Text>
+                                        </TouchableOpacity>
+                                </ScrollView>
+                        </View>
                 )
         }
 
         if (loading) {
                 return (
                         <SafeAreaView style={styles.container}>
-                                <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
+                                <StatusBar backgroundColor="#f5f5f5" barStyle="dark-content" />
                                 <View style={styles.loadingContainer}>
-                                        <ActivityIndicator size="large" color="#3B82F6" />
+                                        <ActivityIndicator size="large" color="#2196F3" />
                                         <Text style={styles.loadingText}>डेटा लोड होत आहे...</Text>
                                 </View>
                         </SafeAreaView>
@@ -145,200 +605,60 @@ const AdminDashboardScreen = ({ navigation }) => {
         }
 
         if (selectedUser) {
-                return <UserDetailView user={selectedUser} onBack={() => setSelectedUser(null)} />
+                return (
+                        <SafeAreaView style={styles.container}>
+                                <StatusBar backgroundColor="#2196F3" barStyle="light-content" />
+                                {renderUserDetail()}
+                        </SafeAreaView>
+                )
         }
 
-        return (
-                <SafeAreaView style={styles.container}>
-                        <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-
-                        <View style={styles.header}>
-                                <Text style={styles.title}>प्रशासन डैशबोर्ड</Text>
-                                <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-                                        <Ionicons name="log-out-outline" size={20} color="#fff" />
-                                </TouchableOpacity>
-                        </View>
-
-                        {/* Stats Cards */}
-                        <View style={styles.statsContainer}>
-                                <View style={styles.statCard}>
-                                        <Text style={styles.statNumber}>{getTotalUsers()}</Text>
-                                        <Text style={styles.statLabel}>एकूण वापरकर्ते</Text>
-                                </View>
-                                <View style={styles.statCard}>
-                                        <Text style={styles.statNumber}>{getTotalActiveUsers()}</Text>
-                                        <Text style={styles.statLabel}>सक्रिय वापरकर्ते</Text>
-                                </View>
-                        </View>
-
-                        {/* Search and filter controls */}
-                        <View style={styles.controls}>
-                                <View style={styles.searchContainer}>
-                                        <Ionicons name="search" size={20} color="#666" />
-                                        <TextInput
-                                                style={styles.searchInput}
-                                                placeholder="फोन नंबर किंवा ID शोधा..."
-                                                value={searchTerm}
-                                                onChangeText={setSearchTerm}
-                                        />
-                                </View>
-                                <TouchableOpacity
-                                        style={[styles.filterButton, activeOnly && styles.activeFilter]}
-                                        onPress={() => setActiveOnly(!activeOnly)}
-                                >
-                                        <Text style={[styles.filterButtonText, activeOnly && styles.activeFilterText]}>
-                                                {activeOnly ? "सर्व" : "सक्रिय"}
-                                        </Text>
-                                </TouchableOpacity>
-                        </View>
-
-                        {/* User list */}
-                        <FlatList
-                                data={filteredUsers}
-                                renderItem={renderUserItem}
-                                keyExtractor={([userId]) => userId}
-                                style={styles.usersList}
-                                showsVerticalScrollIndicator={false}
-                                ListEmptyComponent={
-                                        <View style={styles.emptyContainer}>
-                                                <Text style={styles.emptyText}>कोणतेही वापरकर्ते सापडले नाहीत</Text>
-                                        </View>
-                                }
-                        />
-                </SafeAreaView>
-        )
-}
-
-const UserDetailView = ({ user, onBack }: { user: User; onBack: () => void }) => {
-        const groupedSessions = Object.values(user.sessions || {}).reduce(
-                (acc, session) => {
-                        const dateKey = format(parseISO(session.loginTime), "yyyy-MM-dd")
-                        if (!acc[dateKey]) {
-                                acc[dateKey] = []
-                        }
-                        acc[dateKey].push(session)
-                        return acc
-                },
-                {} as Record<string, Session[]>,
-        )
-
-        const sortedDates = Object.keys(groupedSessions).sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
-
-        const totalSessionTime = Object.values(user.sessions || {}).reduce((total, session) => {
-                if (session.logoutTime) {
-                        return total + differenceInMinutes(new Date(session.logoutTime), new Date(session.loginTime))
-                }
-                return total
-        }, 0)
-
-        const formatDateLabel = (dateString: string) => {
-                const date = new Date(dateString)
-                if (isToday(date)) return "आज"
-                if (isYesterday(date)) return "काल"
-                return format(date, "dd MMM yyyy")
+        if (currentView === "users") {
+                return <SafeAreaView style={styles.container}>{renderUserManagement()}</SafeAreaView>
         }
 
-        const formatTime = (isoString: string) => {
-                return format(parseISO(isoString), "h:mm a")
-        }
-
-        return (
-                <SafeAreaView style={styles.container}>
-                        <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-
-                        <View style={styles.header}>
-                                <TouchableOpacity onPress={onBack} style={styles.backButton}>
-                                        <Ionicons name="arrow-back" size={24} color="#333" />
-                                </TouchableOpacity>
-                                <Text style={styles.title}>वापरकर्ता तपशील</Text>
-                                <View style={styles.headerSpacer} />
-                        </View>
-
-                        <ScrollView style={styles.detailContent}>
-                                {/* User Info */}
-                                <View style={styles.userDetailCard}>
-                                        <Text style={styles.userDetailPhone}>{user.phone}</Text>
-                                        <Text style={styles.userDetailId}>ID: {user.uid.substring(0, 12)}...</Text>
-                                        <Text style={styles.userDetailType}>प्रकार: {user.userType}</Text>
-
-                                        <View style={styles.userStats}>
-                                                <View style={styles.stat}>
-                                                        <Text style={styles.statLabel}>एकूण सेशन</Text>
-                                                        <Text style={styles.statValue}>{Object.keys(user.sessions || {}).length}</Text>
-                                                </View>
-
-                                                <View style={styles.stat}>
-                                                        <Text style={styles.statLabel}>एकूण वेळ</Text>
-                                                        <Text style={styles.statValue}>
-                                                                {Math.floor(totalSessionTime / 60)}h {totalSessionTime % 60}m
-                                                        </Text>
-                                                </View>
-
-                                                <View style={styles.stat}>
-                                                        <Text style={styles.statLabel}>स्थिती</Text>
-                                                        <Text style={[styles.statValue, user.currentSession ? styles.statActive : styles.statInactive]}>
-                                                                {user.currentSession ? "सक्रिय" : "निष्क्रिय"}
-                                                        </Text>
-                                                </View>
-                                        </View>
-                                </View>
-
-                                {/* Session History */}
-                                <View style={styles.sessionHistory}>
-                                        <Text style={styles.sectionTitle}>सेशन इतिहास</Text>
-
-                                        {sortedDates.length > 0 ? (
-                                                sortedDates.map((date) => (
-                                                        <View key={date} style={styles.dateGroup}>
-                                                                <Text style={styles.dateLabel}>{formatDateLabel(date)}</Text>
-
-                                                                <View style={styles.sessionsList}>
-                                                                        {groupedSessions[date]
-                                                                                .sort((a, b) => new Date(b.loginTime).getTime() - new Date(a.loginTime).getTime())
-                                                                                .map((session, index) => {
-                                                                                        const isCurrent = session.id === user.currentSession
-                                                                                        const loginTime = parseISO(session.loginTime)
-                                                                                        const logoutTime = session.logoutTime ? parseISO(session.logoutTime) : null
-                                                                                        const duration = logoutTime
-                                                                                                ? differenceInMinutes(logoutTime, loginTime)
-                                                                                                : differenceInMinutes(new Date(), loginTime)
-
-                                                                                        return (
-                                                                                                <View key={index} style={[styles.sessionItem, isCurrent && styles.currentSessionItem]}>
-                                                                                                        <View style={styles.sessionTimeRow}>
-                                                                                                                <Text style={styles.sessionTime}>
-                                                                                                                        {formatTime(session.loginTime)} -{" "}
-                                                                                                                        {session.logoutTime ? formatTime(session.logoutTime) : "सक्रिय आहे"}
-                                                                                                                </Text>
-                                                                                                                {isCurrent && (
-                                                                                                                        <View style={styles.currentBadge}>
-                                                                                                                                <Text style={styles.currentBadgeText}>सक्रिय</Text>
-                                                                                                                        </View>
-                                                                                                                )}
-                                                                                                        </View>
-                                                                                                        <Text style={styles.sessionDuration}>
-                                                                                                                कालावधी: {Math.floor(duration / 60)}h {duration % 60}m
-                                                                                                        </Text>
-                                                                                                </View>
-                                                                                        )
-                                                                                })}
-                                                                </View>
-                                                        </View>
-                                                ))
-                                        ) : (
-                                                <Text style={styles.noSessions}>कोणताही सेशन इतिहास उपलब्ध नाही</Text>
-                                        )}
-                                </View>
-                        </ScrollView>
-                </SafeAreaView>
-        )
+        return <SafeAreaView style={styles.container}>{renderDashboard()}</SafeAreaView>
 }
 
 const styles = StyleSheet.create({
         container: {
                 flex: 1,
                 backgroundColor: "#f5f5f5",
-                marginTop: 25,
+                marginTop: 30
+        },
+        header: {
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: 16,
+                backgroundColor: "#fff",
+                elevation: 4,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+        },
+        headerTitle: {
+                fontSize: 18,
+                fontWeight: "600",
+                color: "#000",
+        },
+        logoutButton: {
+                backgroundColor: "#FF5722",
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                justifyContent: "center",
+                alignItems: "center",
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+                elevation: 4,
+        },
+        content: {
+                flex: 1,
+                padding: 16,
         },
         loadingContainer: {
                 flex: 1,
@@ -350,75 +670,43 @@ const styles = StyleSheet.create({
                 fontSize: 16,
                 color: "#333",
         },
-        header: {
+        profileSection: {
                 flexDirection: "row",
                 alignItems: "center",
-                justifyContent: "space-between",
-                paddingHorizontal: 20,
-                paddingVertical: 16,
-                backgroundColor: "#fff",
-                borderBottomWidth: 1,
-                borderBottomColor: "#e0e0e0",
-                shadowColor: "#000",
-                shadowOffset: {
-                        width: 0,
-                        height: 2,
-                },
-                shadowOpacity: 0.1,
-                shadowRadius: 3,
-                elevation: 3,
+                marginBottom: 20,
         },
-        title: {
-                fontSize: 20,
-                fontWeight: "bold",
-                color: "#333",
+        profileImage: {
+                width: 60,
+                height: 60,
+                borderRadius: 30,
+                marginRight: 16,
+        },
+        profileInfo: {
                 flex: 1,
-                textAlign: "center",
         },
-        logoutButton: {
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                backgroundColor: "#FF5722",
-                justifyContent: "center",
-                alignItems: "center",
-                shadowColor: "#FF5722",
-                shadowOffset: {
-                        width: 0,
-                        height: 2,
-                },
-                shadowOpacity: 0.3,
-                shadowRadius: 4,
-                elevation: 4,
+        profileName: {
+                fontSize: 18,
+                fontWeight: "600",
+                color: "#000",
         },
-        backButton: {
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                backgroundColor: "#f0f0f0",
-                justifyContent: "center",
-                alignItems: "center",
-        },
-        headerSpacer: {
-                width: 40,
+        profileRole: {
+                fontSize: 14,
+                color: "#666",
+                marginTop: 2,
         },
         statsContainer: {
                 flexDirection: "row",
-                paddingHorizontal: 20,
-                paddingVertical: 20,
-                gap: 16,
+                justifyContent: "space-between",
+                marginBottom: 16,
         },
         statCard: {
-                flex: 1,
                 backgroundColor: "#fff",
-                borderRadius: 16,
-                padding: 24,
+                borderRadius: 12,
+                padding: 20,
                 alignItems: "center",
+                width: "48%",
                 shadowColor: "#000",
-                shadowOffset: {
-                        width: 0,
-                        height: 2,
-                },
+                shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.1,
                 shadowRadius: 4,
                 elevation: 3,
@@ -426,7 +714,7 @@ const styles = StyleSheet.create({
         statNumber: {
                 fontSize: 28,
                 fontWeight: "bold",
-                color: "#333",
+                color: "#2196F3",
                 marginBottom: 8,
         },
         statLabel: {
@@ -435,57 +723,115 @@ const styles = StyleSheet.create({
                 textAlign: "center",
                 fontWeight: "500",
         },
-        controls: {
+        selectionHeader: {
                 flexDirection: "row",
-                paddingHorizontal: 20,
-                marginBottom: 20,
-                gap: 12,
-        },
-        searchContainer: {
-                flex: 1,
-                flexDirection: "row",
+                justifyContent: "space-between",
                 alignItems: "center",
+                marginTop: 20,
+                marginBottom: 16,
+        },
+        selectionTitle: {
+                fontSize: 16,
+                fontWeight: "600",
+                color: "#000",
+        },
+        clearButton: {
+                backgroundColor: "#FF5722",
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 16,
+        },
+        clearButtonText: {
+                color: "#fff",
+                fontSize: 12,
+                fontWeight: "500",
+        },
+        expandableSection: {
                 backgroundColor: "#fff",
                 borderRadius: 12,
-                paddingHorizontal: 16,
-                paddingVertical: 12,
+                marginBottom: 16,
+                overflow: "hidden",
                 shadowColor: "#000",
-                shadowOffset: {
-                        width: 0,
-                        height: 1,
-                },
+                shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.1,
-                shadowRadius: 2,
-                elevation: 2,
+                shadowRadius: 4,
+                elevation: 3,
         },
-        searchInput: {
-                flex: 1,
-                marginLeft: 12,
+        expandableHeader: {
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: 16,
+        },
+        expandableTitle: {
                 fontSize: 16,
+                color: "#000",
+                fontWeight: "500",
+        },
+        dropdownContent: {
+                borderTopWidth: 1,
+                borderTopColor: "#eee",
+        },
+        dropdownItem: {
+                padding: 16,
+                borderBottomWidth: 1,
+                borderBottomColor: "#f0f0f0",
+        },
+        dropdownItemText: {
+                fontSize: 15,
                 color: "#333",
         },
-        filterButton: {
-                paddingHorizontal: 20,
-                paddingVertical: 12,
-                backgroundColor: "#e0e0e0",
-                borderRadius: 12,
-                justifyContent: "center",
+        vibhagLabel: {
+                padding: 16,
+                fontSize: 16,
+                fontWeight: "600",
+                color: "#000",
+                borderBottomWidth: 1,
+                borderBottomColor: "#eee",
+        },
+        vibhagItem: {
+                padding: 16,
+                borderBottomWidth: 1,
+                borderBottomColor: "#f0f0f0",
+                flexDirection: "row",
+                justifyContent: "space-between",
                 alignItems: "center",
         },
-        activeFilter: {
-                backgroundColor: "#3498db",
+        vibhagItemSelected: {
+                backgroundColor: "#f0f8ff",
         },
-        filterButtonText: {
+        vibhagItemText: {
+                fontSize: 15,
                 color: "#333",
-                fontWeight: "600",
-                fontSize: 14,
         },
-        activeFilterText: {
+        manageUsersButton: {
+                backgroundColor: "#2196F3",
+                borderRadius: 12,
+                padding: 16,
+                alignItems: "center",
+                marginTop: 16,
+                flexDirection: "row",
+                justifyContent: "center",
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+                elevation: 3,
+        },
+        manageUsersButtonText: {
                 color: "#fff",
+                fontSize: 16,
+                fontWeight: "600",
+                marginLeft: 8,
         },
-        usersList: {
-                flex: 1,
-                paddingHorizontal: 20,
+        usersSection: {
+                marginTop: 8,
+        },
+        sectionTitle: {
+                fontSize: 18,
+                fontWeight: "600",
+                color: "#000",
+                marginBottom: 16,
         },
         userCard: {
                 backgroundColor: "#fff",
@@ -493,195 +839,231 @@ const styles = StyleSheet.create({
                 padding: 16,
                 marginBottom: 12,
                 flexDirection: "row",
+                justifyContent: "space-between",
                 alignItems: "center",
                 shadowColor: "#000",
-                shadowOffset: {
-                        width: 0,
-                        height: 1,
-                },
+                shadowOffset: { width: 0, height: 2 },
                 shadowOpacity: 0.1,
-                shadowRadius: 2,
-                elevation: 2,
+                shadowRadius: 4,
+                elevation: 3,
         },
         userInfo: {
                 flex: 1,
         },
-        userHeader: {
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 6,
-        },
-        userPhone: {
+        userName: {
                 fontSize: 16,
                 fontWeight: "600",
-                color: "#333",
+                color: "#000",
+                marginBottom: 4,
         },
-        userTypeAndStatus: {
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
-        },
-        userTypeText: {
-                fontSize: 11,
+        userPhone: {
+                fontSize: 14,
                 color: "#666",
-                backgroundColor: "#f0f0f0",
-                paddingHorizontal: 8,
-                paddingVertical: 3,
-                borderRadius: 12,
+                marginBottom: 4,
+        },
+        userType: {
+                fontSize: 12,
                 fontWeight: "500",
+                paddingHorizontal: 8,
+                paddingVertical: 2,
+                borderRadius: 12,
+                overflow: "hidden",
+        },
+        adminType: {
+                backgroundColor: "#E3F2FD",
+                color: "#1976D2",
+        },
+        agentType: {
+                backgroundColor: "#E8F5E8",
+                color: "#388E3C",
+        },
+        userStatus: {
+                alignItems: "center",
+                flexDirection: "row",
         },
         statusIndicator: {
-                width: 10,
-                height: 10,
-                borderRadius: 5,
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                marginRight: 8,
         },
-        userId: {
+        activeIndicator: {
+                backgroundColor: "#4CAF50",
+        },
+        inactiveIndicator: {
+                backgroundColor: "#F44336",
+        },
+        statusText: {
                 fontSize: 12,
                 color: "#666",
-                marginBottom: 8,
+                marginRight: 8,
         },
-        sessionInfo: {
-                gap: 3,
-        },
-        sessionText: {
-                fontSize: 12,
-                color: "#666",
-        },
-        emptyContainer: {
+        userDetailContainer: {
                 flex: 1,
+                backgroundColor: "#f5f5f5",
+        },
+        userDetailHeader: {
+                backgroundColor: "#2196F3",
+                padding: 16,
+                flexDirection: "row",
+                alignItems: "center",
+                elevation: 4,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+        },
+        backButton: {
+                backgroundColor: "rgba(255,255,255,0.2)",
+                width: 36,
+                height: 36,
+                borderRadius: 18,
                 justifyContent: "center",
                 alignItems: "center",
+                marginRight: 16,
+        },
+        userDetailTitle: {
+                fontSize: 18,
+                fontWeight: "600",
+                color: "#fff",
+        },
+        userDetailContent: {
+                flex: 1,
+                padding: 16,
+        },
+        userInfoCard: {
+                backgroundColor: "#fff",
+                borderRadius: 12,
+                padding: 20,
+                marginBottom: 16,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+                elevation: 3,
+        },
+        userDetailName: {
+                fontSize: 24,
+                fontWeight: "bold",
+                color: "#000",
+                marginBottom: 8,
+        },
+        userDetailPhone: {
+                fontSize: 16,
+                color: "#666",
+                marginBottom: 16,
+        },
+        userTypeContainer: {
+                marginBottom: 16,
+        },
+        userTypeBadge: {
+                fontSize: 14,
+                fontWeight: "600",
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 16,
+                alignSelf: "flex-start",
+        },
+        adminBadge: {
+                backgroundColor: "#E3F2FD",
+                color: "#1976D2",
+        },
+        agentBadge: {
+                backgroundColor: "#E8F5E8",
+                color: "#388E3C",
+        },
+        statusRow: {
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                paddingVertical: 8,
+                borderBottomWidth: 1,
+                borderBottomColor: "#f0f0f0",
+        },
+        statusLabel: {
+                fontSize: 14,
+                color: "#666",
+                fontWeight: "500",
+        },
+        statusValue: {
+                fontSize: 14,
+                color: "#000",
+                fontWeight: "400",
+        },
+        activeStatus: {
+                color: "#4CAF50",
+                fontWeight: "600",
+        },
+        inactiveStatus: {
+                color: "#F44336",
+                fontWeight: "600",
+        },
+        sessionHistoryCard: {
+                backgroundColor: "#fff",
+                borderRadius: 12,
+                padding: 20,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+                elevation: 3,
+        },
+        sessionItem: {
+                borderBottomWidth: 1,
+                borderBottomColor: "#f0f0f0",
+                paddingVertical: 12,
+        },
+        sessionHeader: {
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 4,
+        },
+        sessionNumber: {
+                fontSize: 14,
+                fontWeight: "600",
+                color: "#000",
+        },
+        sessionStatus: {
+                fontSize: 12,
+                fontWeight: "500",
+                paddingHorizontal: 8,
+                paddingVertical: 2,
+                borderRadius: 10,
+        },
+        completedSession: {
+                backgroundColor: "#E8F5E8",
+                color: "#388E3C",
+        },
+        activeSession: {
+                backgroundColor: "#FFF3E0",
+                color: "#F57C00",
+        },
+        sessionTime: {
+                fontSize: 12,
+                color: "#666",
+                marginBottom: 2,
+        },
+        sessionDuration: {
+                fontSize: 11,
+                color: "#999",
+                fontStyle: "italic",
+        },
+        noDataText: {
+                fontSize: 14,
+                color: "#666",
+                textAlign: "center",
+                fontStyle: "italic",
+                paddingVertical: 20,
+        },
+        emptyContainer: {
                 padding: 40,
+                alignItems: "center",
         },
         emptyText: {
                 fontSize: 16,
                 color: "#666",
                 textAlign: "center",
-        },
-        detailContent: {
-                flex: 1,
-                paddingHorizontal: 20,
-        },
-        userDetailCard: {
-                backgroundColor: "#fff",
-                borderRadius: 16,
-                padding: 24,
-                marginTop: 20,
-                marginBottom: 24,
-                shadowColor: "#000",
-                shadowOffset: {
-                        width: 0,
-                        height: 2,
-                },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 3,
-        },
-        userDetailPhone: {
-                fontSize: 22,
-                fontWeight: "bold",
-                color: "#333",
-                marginBottom: 6,
-        },
-        userDetailId: {
-                fontSize: 14,
-                color: "#666",
-                marginBottom: 6,
-        },
-        userDetailType: {
-                fontSize: 14,
-                color: "#3498db",
-                marginBottom: 20,
-                fontWeight: "500",
-        },
-        userStats: {
-                flexDirection: "row",
-                justifyContent: "space-between",
-        },
-        stat: {
-                alignItems: "center",
-                minWidth: 80,
-        },
-        statValue: {
-                fontSize: 16,
-                fontWeight: "bold",
-                color: "#333",
-        },
-        statActive: {
-                color: "#2ecc71",
-        },
-        statInactive: {
-                color: "#e74c3c",
-        },
-        sessionHistory: {
-                marginBottom: 30,
-        },
-        sectionTitle: {
-                fontSize: 18,
-                fontWeight: "bold",
-                color: "#333",
-                marginBottom: 16,
-        },
-        dateGroup: {
-                marginBottom: 20,
-        },
-        dateLabel: {
-                fontSize: 16,
-                color: "#3498db",
-                marginBottom: 12,
-                paddingBottom: 6,
-                borderBottomWidth: 1,
-                borderBottomColor: "#eee",
-                fontWeight: "600",
-        },
-        sessionsList: {
-                marginBottom: 12,
-        },
-        sessionItem: {
-                backgroundColor: "#f8f9fa",
-                borderRadius: 12,
-                padding: 16,
-                marginBottom: 8,
-                borderLeftWidth: 4,
-                borderLeftColor: "#3498db",
-        },
-        currentSessionItem: {
-                backgroundColor: "#e8f4fc",
-                borderLeftColor: "#2ecc71",
-        },
-        sessionTimeRow: {
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 8,
-        },
-        sessionTime: {
-                fontWeight: "500",
-                color: "#333",
-                fontSize: 14,
-        },
-        currentBadge: {
-                backgroundColor: "#2ecc71",
-                borderRadius: 12,
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-        },
-        currentBadgeText: {
-                color: "#fff",
-                fontSize: 10,
-                fontWeight: "bold",
-        },
-        sessionDuration: {
-                fontSize: 13,
-                color: "#666",
-        },
-        noSessions: {
-                color: "#666",
-                fontStyle: "italic",
-                textAlign: "center",
-                padding: 20,
-                fontSize: 14,
         },
 })
 

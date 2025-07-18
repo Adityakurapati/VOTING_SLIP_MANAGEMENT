@@ -14,7 +14,7 @@ import {
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { getAuth, signOut } from "firebase/auth"
-import { getDatabase, ref, update, onValue } from "firebase/database"
+import { getDatabase, ref, update, onValue, get } from "firebase/database"
 
 const ProfileScreen = ({ navigation }) => {
         const [userInfo, setUserInfo] = useState(null)
@@ -59,19 +59,28 @@ const ProfileScreen = ({ navigation }) => {
                 setLoggingOut(true)
                 try {
                         const user = auth.currentUser
-                        if (user && userInfo?.currentSession) {
-                                const logoutTime = new Date().toISOString()
+                        if (user) {
+                                // Get current user data to check for active session
+                                const userRef = ref(database, `users/${user.uid}`)
+                                const snapshot = await get(userRef)
 
-                                // Update current session with logout time
-                                await update(ref(database, `users/${user.uid}/sessions/${userInfo.currentSession}`), {
-                                        logoutTime,
-                                })
+                                if (snapshot.exists()) {
+                                        const userData = snapshot.val()
+                                        if (userData.currentSession) {
+                                                const logoutTime = new Date().toISOString()
 
-                                // Update user info
-                                await update(ref(database, `users/${user.uid}`), {
-                                        currentSession: null,
-                                        lastLogout: logoutTime,
-                                })
+                                                // Update current session with logout time
+                                                await update(ref(database, `users/${user.uid}/sessions/${userData.currentSession}`), {
+                                                        logoutTime,
+                                                })
+
+                                                // Update user info
+                                                await update(ref(database, `users/${user.uid}`), {
+                                                        currentSession: null,
+                                                        lastLogout: logoutTime,
+                                                })
+                                        }
+                                }
                         }
 
                         await signOut(auth)
@@ -136,7 +145,7 @@ const ProfileScreen = ({ navigation }) => {
                                 {/* Profile Section */}
                                 <View style={styles.profileSection}>
                                         <Image source={require("../assets/profile-placeholder.png")} style={styles.profileImage} />
-                                        <Text style={styles.profileName}>एजंट अॅलेक्स</Text>
+                                        <Text style={styles.profileName}>{userInfo?.fullName || "एजंट अॅलेक्स"}</Text>
                                         <Text style={styles.profileRole}>{userInfo?.userType || "फील्ड एजंट"}</Text>
                                         <View style={styles.statusContainer}>
                                                 <View style={[styles.statusDot, { backgroundColor: getSessionStatusColor() }]} />

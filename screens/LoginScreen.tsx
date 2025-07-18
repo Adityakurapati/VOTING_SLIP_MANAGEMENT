@@ -220,6 +220,7 @@ const LoginScreen = ({ navigation }) => {
                                                 value={otp}
                                                 onChangeText={setOtp}
                                                 secureTextEntry
+                                                keyboardType="phone-pad"
                                                 editable={!loading}
                                         />
                                 </View>
@@ -244,12 +245,6 @@ const LoginScreen = ({ navigation }) => {
                                         <Text style={styles.registerButtonText}>खाते नाहीये का? आता नोंदणी करा.</Text>
                                 </TouchableOpacity>
 
-                                {/* Demo Credentials Info */}
-                                <View style={styles.demoInfo}>
-                                        <Text style={styles.demoTitle}>डेमो क्रेडेंशियल्स:</Text>
-                                        <Text style={styles.demoText}>फील्ड एजंट: 1234567890 / 123456</Text>
-                                        <Text style={styles.demoText}>प्रशासन: 9876543210 / 123456</Text>
-                                </View>
                         </View>
                 </SafeAreaView>
         )
@@ -280,7 +275,7 @@ const styles = StyleSheet.create({
                 fontWeight: "700",
                 color: "#1F2937",
                 textAlign: "center",
-                marginBottom: 40,
+                marginBottom: 20,
                 lineHeight: 32,
         },
         userTypeContainer: {
