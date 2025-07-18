@@ -10,6 +10,7 @@ import { AppState } from "react-native"
 import { getDatabase, ref, update, get } from "firebase/database"
 import { auth } from "./firebaseConfig"
 import { VoterProvider } from "./contexts/VoterContext"
+import { getCurrentLocation } from "./utils/locationService"
 
 // Import screens
 import LoginScreen from "./screens/LoginScreen"
@@ -108,6 +109,9 @@ export default function App() {
                                 const currentUser = auth.currentUser
                                 if (currentUser) {
                                         try {
+                                                // Get current location for logout
+                                                const logoutLocation = await getCurrentLocation()
+
                                                 // Get current user data
                                                 const userRef = ref(database, `users/${currentUser.uid}`)
                                                 const snapshot = await get(userRef)
@@ -117,15 +121,17 @@ export default function App() {
                                                         if (userData.currentSession) {
                                                                 const logoutTime = new Date().toISOString()
 
-                                                                // Update current session with logout time
+                                                                // Update current session with logout time and location
                                                                 await update(ref(database, `users/${currentUser.uid}/sessions/${userData.currentSession}`), {
                                                                         logoutTime,
+                                                                        logoutLocation,
                                                                 })
 
                                                                 // Update user info
                                                                 await update(ref(database, `users/${currentUser.uid}`), {
                                                                         currentSession: null,
                                                                         lastLogout: logoutTime,
+                                                                        lastLogoutLocation: logoutLocation,
                                                                 })
                                                         }
                                                 }

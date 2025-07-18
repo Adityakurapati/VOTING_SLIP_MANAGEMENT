@@ -20,7 +20,11 @@
                         "adaptiveIcon": {
                                 "foregroundImage": "./assets/adaptive-icon.png",
                                 "backgroundColor": "#ffffff"
-                        }
+                        },
+                        "permissions": [
+                                "ACCESS_COARSE_LOCATION",
+                                "ACCESS_FINE_LOCATION"
+                        ]
                 },
                 "web": {
                         "favicon": "./assets/favicon.png"
@@ -29,6 +33,14 @@
                         "eas": {
                                 "projectId": "a2359d83-864e-4619-a6db-723a44072e2b"
                         }
-                }
+                },
+                "plugins": [
+                        [
+                                "expo-location",
+                                {
+                                        "locationAlwaysAndWhenInUsePermission": "This app needs access to location to track login/logout locations."
+                                }
+                        ]
+                ]
         }
 }

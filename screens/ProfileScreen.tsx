@@ -15,6 +15,7 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import { getAuth, signOut } from "firebase/auth"
 import { getDatabase, ref, update, onValue, get } from "firebase/database"
+import { getCurrentLocation, formatLocationString } from "../utils/locationService"
 
 const ProfileScreen = ({ navigation }) => {
         const [userInfo, setUserInfo] = useState(null)
@@ -60,6 +61,9 @@ const ProfileScreen = ({ navigation }) => {
                 try {
                         const user = auth.currentUser
                         if (user) {
+                                // Get current location for logout
+                                const logoutLocation = await getCurrentLocation()
+
                                 // Get current user data to check for active session
                                 const userRef = ref(database, `users/${user.uid}`)
                                 const snapshot = await get(userRef)
@@ -69,15 +73,17 @@ const ProfileScreen = ({ navigation }) => {
                                         if (userData.currentSession) {
                                                 const logoutTime = new Date().toISOString()
 
-                                                // Update current session with logout time
+                                                // Update current session with logout time and location
                                                 await update(ref(database, `users/${user.uid}/sessions/${userData.currentSession}`), {
                                                         logoutTime,
+                                                        logoutLocation,
                                                 })
 
                                                 // Update user info
                                                 await update(ref(database, `users/${user.uid}`), {
                                                         currentSession: null,
                                                         lastLogout: logoutTime,
+                                                        lastLogoutLocation: logoutLocation,
                                                 })
                                         }
                                 }
@@ -199,11 +205,31 @@ const ProfileScreen = ({ navigation }) => {
 
                                         <View style={styles.infoItem}>
                                                 <View style={styles.infoIcon}>
+                                                        <Ionicons name="location-outline" size={20} color="#3B82F6" />
+                                                </View>
+                                                <View style={styles.infoContent}>
+                                                        <Text style={styles.infoLabel}>शेवटचे लॉगिन स्थान</Text>
+                                                        <Text style={styles.infoValue}>{formatLocationString(userInfo?.lastLoginLocation)}</Text>
+                                                </View>
+                                        </View>
+
+                                        <View style={styles.infoItem}>
+                                                <View style={styles.infoIcon}>
                                                         <Ionicons name="log-out-outline" size={20} color="#3B82F6" />
                                                 </View>
                                                 <View style={styles.infoContent}>
                                                         <Text style={styles.infoLabel}>शेवटचे लॉगआउट</Text>
                                                         <Text style={styles.infoValue}>{formatDateTime(userInfo?.lastLogout)}</Text>
+                                                </View>
+                                        </View>
+
+                                        <View style={styles.infoItem}>
+                                                <View style={styles.infoIcon}>
+                                                        <Ionicons name="location-outline" size={20} color="#FF5722" />
+                                                </View>
+                                                <View style={styles.infoContent}>
+                                                        <Text style={styles.infoLabel}>शेवटचे लॉगआउट स्थान</Text>
+                                                        <Text style={styles.infoValue}>{formatLocationString(userInfo?.lastLogoutLocation)}</Text>
                                                 </View>
                                         </View>
                                 </View>
