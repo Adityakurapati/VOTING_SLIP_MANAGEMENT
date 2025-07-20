@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { __DEV__ } from "react-native" // Import __DEV__ variable
 import {
         View,
         Text,
@@ -12,12 +13,12 @@ import {
         Alert,
         StatusBar,
         ActivityIndicator,
+        Platform,
 } from "react-native"
-import { signInWithEmailAndPassword } from "firebase/auth"
-import { getAuth } from "firebase/auth"
 import { getDatabase, ref, push, set, update, get } from "firebase/database"
-import { getCurrentLocation } from "../utils/locationService"
-import { sendOTP, verifyOTP, resendOTP } from "../services/msg91Service"
+import { sendPhoneOTP, verifyPhoneOTP, resendPhoneOTP } from "../services/phoneAuthService"
+import { sendMockOTP, verifyMockOTP, resendMockOTP } from "../services/mockAuthService"
+import { auth } from "../firebaseConfig"
 
 const LoginScreen = ({ navigation }) => {
         const [mobileNumber, setMobileNumber] = useState("")
@@ -27,7 +28,8 @@ const LoginScreen = ({ navigation }) => {
         const [otpSent, setOtpSent] = useState(false)
         const [resendLoading, setResendLoading] = useState(false)
         const [countdown, setCountdown] = useState(0)
-        const auth = getAuth()
+        const [verificationId, setVerificationId] = useState("")
+        const [useMockAuth, setUseMockAuth] = useState(Platform.OS !== "web") // Use mock for mobile, real for web
         const database = getDatabase()
 
         // Countdown timer for resend OTP
@@ -45,26 +47,20 @@ const LoginScreen = ({ navigation }) => {
 
         const createUserSession = async (userId, phone, actualUserType) => {
                 try {
-                        // Get current location for login
-                        const loginLocation = await getCurrentLocation()
-
                         const sessionId = push(ref(database, `users/${userId}/sessions`)).key
                         const loginTime = new Date().toISOString()
 
-                        // Create session record with location
+                        // Create session record
                         await set(ref(database, `users/${userId}/sessions/${sessionId}`), {
                                 loginTime,
                                 logoutTime: null,
-                                loginLocation,
-                                logoutLocation: null,
                         })
 
-                        // Update user info with location
+                        // Update user info
                         await update(ref(database, `users/${userId}`), {
                                 phone,
                                 currentSession: sessionId,
                                 lastLogin: loginTime,
-                                lastLoginLocation: loginLocation,
                                 userType: actualUserType,
                         })
 
@@ -136,12 +132,24 @@ const LoginScreen = ({ navigation }) => {
 
                 setLoading(true)
                 try {
-                        const response = await sendOTP(mobileNumber)
+                        let response
+
+                        if (useMockAuth) {
+                                response = await sendMockOTP(mobileNumber)
+                        } else {
+                                response = await sendPhoneOTP(mobileNumber)
+                        }
 
                         if (response.success) {
                                 setOtpSent(true)
                                 setCountdown(60) // 60 seconds countdown for resend
+                                setVerificationId(response.verificationId || "")
                                 Alert.alert("यशस्वी", response.message)
+
+                                // Show OTP in console for mock auth
+                                if (useMockAuth) {
+                                        Alert.alert("डेव्हलपमेंट मोड", `OTP कन्सोलमध्ये पहा किंवा 123456 वापरा`)
+                                }
                         } else {
                                 Alert.alert("त्रुटी", response.message)
                         }
@@ -158,11 +166,23 @@ const LoginScreen = ({ navigation }) => {
 
                 setResendLoading(true)
                 try {
-                        const response = await resendOTP(mobileNumber)
+                        let response
+
+                        if (useMockAuth) {
+                                response = await resendMockOTP(mobileNumber)
+                        } else {
+                                response = await resendPhoneOTP(mobileNumber)
+                        }
 
                         if (response.success) {
                                 setCountdown(60)
+                                setVerificationId(response.verificationId || "")
                                 Alert.alert("यशस्वी", response.message)
+
+                                // Show OTP in console for mock auth
+                                if (useMockAuth) {
+                                        Alert.alert("डेव्हलपमेंट मोड", `नवा OTP कन्सोलमध्ये पहा किंवा 123456 वापरा`)
+                                }
                         } else {
                                 Alert.alert("त्रुटी", response.message)
                         }
@@ -180,15 +200,25 @@ const LoginScreen = ({ navigation }) => {
                         return
                 }
 
-                if (otp.length !== 4 && otp.length !== 6) {
-                        Alert.alert("त्रुटी", "कृपया वैध OTP भरा")
+                if (otp.length !== 6) {
+                        Alert.alert("त्रुटी", "कृपया 6 अंकी OTP भरा")
                         return
                 }
 
                 setLoading(true)
                 try {
-                        // First verify OTP with MSG91
-                        const otpResponse = await verifyOTP(mobileNumber, otp)
+                        let otpResponse
+
+                        if (useMockAuth) {
+                                // For mock auth, allow 123456 as universal OTP
+                                if (otp === "123456") {
+                                        otpResponse = await verifyMockOTP(mobileNumber, otp)
+                                } else {
+                                        otpResponse = await verifyMockOTP(mobileNumber, otp)
+                                }
+                        } else {
+                                otpResponse = await verifyPhoneOTP(verificationId, otp)
+                        }
 
                         if (!otpResponse.success) {
                                 Alert.alert("त्रुटी", otpResponse.message)
@@ -196,30 +226,34 @@ const LoginScreen = ({ navigation }) => {
                                 return
                         }
 
-                        // OTP verified, now proceed with Firebase authentication
-                        // Create email from mobile number for Firebase compatibility
-                        const email = `${mobileNumber}@gmail.com`
+                        const firebaseUser = otpResponse.user
 
-                        // Try to sign in with Firebase (using mobile number as password for existing users)
-                        try {
-                                const userCredential = await signInWithEmailAndPassword(auth, email, mobileNumber)
-                                const user = userCredential.user
+                        if (useMockAuth) {
+                                // For mock auth, create/update user in database
+                                const userId = firebaseUser.uid
+                                const userRef = ref(database, `users/${userId}`)
+                                const snapshot = await get(userRef)
 
-                                // Validate user role
-                                const roleValidation = await validateUserRole(user.uid, userType)
-
-                                if (!roleValidation.isValid) {
-                                        // Sign out the user since role validation failed
-                                        await auth.signOut()
-                                        Alert.alert("प्रवेश नाकारला", roleValidation.message)
-                                        return
+                                if (!snapshot.exists()) {
+                                        // Create mock user in database
+                                        await set(userRef, {
+                                                fullName: firebaseUser.fullName,
+                                                phone: mobileNumber,
+                                                userType: firebaseUser.userType,
+                                                phoneNumber: firebaseUser.phoneNumber,
+                                                createdAt: new Date().toISOString(),
+                                                currentSession: null,
+                                                lastLogin: null,
+                                                lastLogout: null,
+                                                sessions: {},
+                                        })
                                 }
 
-                                // Create session in database with location
-                                await createUserSession(user.uid, mobileNumber, roleValidation.actualUserType)
+                                // Create session and navigate
+                                await createUserSession(userId, mobileNumber, firebaseUser.userType)
 
-                                // Navigate based on actual user type
-                                if (roleValidation.actualUserType === "प्रशासन") {
+                                // Navigate based on user type
+                                if (firebaseUser.userType === "प्रशासन") {
                                         navigation.reset({
                                                 index: 0,
                                                 routes: [{ name: "Admin" }],
@@ -230,10 +264,12 @@ const LoginScreen = ({ navigation }) => {
                                                 routes: [{ name: "FieldAgent" }],
                                         })
                                 }
-                        } catch (firebaseError) {
-                                console.error("Firebase auth error:", firebaseError)
+                        } else {
+                                // Real Firebase auth flow
+                                const userRef = ref(database, `users/${firebaseUser.uid}`)
+                                const snapshot = await get(userRef)
 
-                                if (firebaseError.code === "auth/user-not-found") {
+                                if (!snapshot.exists()) {
                                         Alert.alert("खाते सापडले नाही", "हा मोबाईल नंबर नोंदणीकृत नाही. कृपया प्रथम नोंदणी करा.", [
                                                 {
                                                         text: "नोंदणी करा",
@@ -244,10 +280,33 @@ const LoginScreen = ({ navigation }) => {
                                                         style: "cancel",
                                                 },
                                         ])
-                                } else if (firebaseError.code === "auth/wrong-password") {
-                                        Alert.alert("त्रुटी", "अकाउंट सत्यापनात त्रुटी आली")
+                                        setLoading(false)
+                                        return
+                                }
+
+                                // Validate user role
+                                const roleValidation = await validateUserRole(firebaseUser.uid, userType)
+
+                                if (!roleValidation.isValid) {
+                                        await auth.signOut()
+                                        Alert.alert("प्रवेश नाकारला", roleValidation.message)
+                                        setLoading(false)
+                                        return
+                                }
+
+                                // Create session and navigate
+                                await createUserSession(firebaseUser.uid, mobileNumber, roleValidation.actualUserType)
+
+                                if (roleValidation.actualUserType === "प्रशासन") {
+                                        navigation.reset({
+                                                index: 0,
+                                                routes: [{ name: "Admin" }],
+                                        })
                                 } else {
-                                        Alert.alert("त्रुटी", "लॉगिन करताना त्रुटी आली")
+                                        navigation.reset({
+                                                index: 0,
+                                                routes: [{ name: "FieldAgent" }],
+                                        })
                                 }
                         }
                 } catch (error) {
@@ -262,19 +321,42 @@ const LoginScreen = ({ navigation }) => {
                 setOtpSent(false)
                 setOtp("")
                 setCountdown(0)
+                setVerificationId("")
         }
 
         return (
                 <SafeAreaView style={styles.container}>
                         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+
+                        {/* Add reCAPTCHA container for web */}
+                        {Platform.OS === "web" && <div id="recaptcha-container" style={{ display: "none" }}></div>}
+
                         <View style={styles.content}>
                                 {/* Celebration Image */}
                                 <View style={styles.imageContainer}>
-                                        <Image source={require("../assets/celebration.png")} style={styles.celebrationImage} resizeMode="contain" />
+                                        <Image source={require("../assets/hero.jpg")} style={styles.celebrationImage} resizeMode="contain" />
                                 </View>
 
                                 {/* Title */}
                                 <Text style={styles.title}>पुणे जिल्हा परिषद निवडणूका 2025</Text>
+
+                                {/* Auth Mode Toggle (Development) */}
+                                {__DEV__ && (
+                                        <View style={styles.authModeContainer}>
+                                                <TouchableOpacity
+                                                        style={[styles.authModeButton, useMockAuth && styles.authModeButtonActive]}
+                                                        onPress={() => setUseMockAuth(true)}
+                                                >
+                                                        <Text style={[styles.authModeText, useMockAuth && styles.authModeTextActive]}>Mock Auth</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                        style={[styles.authModeButton, !useMockAuth && styles.authModeButtonActive]}
+                                                        onPress={() => setUseMockAuth(false)}
+                                                >
+                                                        <Text style={[styles.authModeText, !useMockAuth && styles.authModeTextActive]}>Firebase Auth</Text>
+                                                </TouchableOpacity>
+                                        </View>
+                                )}
 
                                 {/* User Type Selection */}
                                 <View style={styles.userTypeContainer}>
@@ -326,7 +408,7 @@ const LoginScreen = ({ navigation }) => {
                                         {otpSent && (
                                                 <TextInput
                                                         style={styles.input}
-                                                        placeholder="OTP एंटर करा"
+                                                        placeholder="6 अंकी OTP एंटर करा"
                                                         placeholderTextColor="#9CA3AF"
                                                         value={otp}
                                                         onChangeText={setOtp}
@@ -393,14 +475,21 @@ const LoginScreen = ({ navigation }) => {
                                         <Text style={styles.demoTitle}>डेमो क्रेडेंशियल्स:</Text>
                                         <Text style={styles.demoText}>फील्ड एजंट: 1234567890</Text>
                                         <Text style={styles.demoText}>प्रशासन: 9876543210</Text>
-                                        <Text style={styles.demoSubText}>* OTP सत्यापनानंतर लॉगिन होईल</Text>
+                                        <Text style={styles.demoText}>तुमचा नंबर: 7507546319</Text>
+                                        <Text style={styles.demoSubText}>
+                                                * {useMockAuth ? "Mock Auth" : "Firebase Auth"} - OTP: 123456 (डेव्हलपमेंट)
+                                        </Text>
                                 </View>
 
                                 {/* OTP Instructions */}
                                 {otpSent && (
                                         <View style={styles.otpInfo}>
-                                                <Text style={styles.otpInfoText}>{mobileNumber} वर OTP पाठवला गेला आहे</Text>
-                                                <Text style={styles.otpInfoSubText}>OTP प्राप्त होण्यासाठी काही मिनिटे वाट पहा</Text>
+                                                <Text style={styles.otpInfoText}>
+                                                        {mobileNumber} वर OTP पाठवला गेला आहे {useMockAuth && "(Mock Mode)"}
+                                                </Text>
+                                                <Text style={styles.otpInfoSubText}>
+                                                        {useMockAuth ? "डेव्हलपमेंट मोड: कन्सोल पहा किंवा 123456 वापरा" : "OTP प्राप्त होण्यासाठी काही मिनिटे वाट पहा"}
+                                                </Text>
                                         </View>
                                 )}
                         </View>
@@ -435,6 +524,31 @@ const styles = StyleSheet.create({
                 textAlign: "center",
                 marginBottom: 40,
                 lineHeight: 32,
+        },
+        authModeContainer: {
+                flexDirection: "row",
+                marginBottom: 16,
+                backgroundColor: "#FEF3C7",
+                borderRadius: 8,
+                padding: 4,
+        },
+        authModeButton: {
+                flex: 1,
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderRadius: 4,
+                alignItems: "center",
+        },
+        authModeButtonActive: {
+                backgroundColor: "#F59E0B",
+        },
+        authModeText: {
+                fontSize: 12,
+                fontWeight: "500",
+                color: "#92400E",
+        },
+        authModeTextActive: {
+                color: "#ffffff",
         },
         userTypeContainer: {
                 flexDirection: "row",
