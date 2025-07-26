@@ -1,7 +1,7 @@
 {
         "expo": {
-                "name": "VOTING_SLIP_MANAGEMENT",
-                "slug": "VOTING_SLIP_MANAGEMENT",
+                "name": "Voting Slip Management",
+                "slug": "voting-slip-management",
                 "version": "1.0.0",
                 "orientation": "portrait",
                 "icon": "./assets/icon.png",
@@ -11,24 +11,41 @@
                         "resizeMode": "contain",
                         "backgroundColor": "#ffffff"
                 },
+                "assetBundlePatterns": [
+                        "**/*"
+                ],
                 "ios": {
-                        "supportsTablet": true
+                        "supportsTablet": true,
+                        "infoPlist": {
+                                "NSLocationWhenInUseUsageDescription": "This app needs location access to track field agent activities and voting locations.",
+                                "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs location access to track field agent activities and voting locations."
+                        }
                 },
                 "android": {
-                        "package": "com.adityai25.VOTING_SLIP_MANAGEMENT",
-                        "versionCode": 1,
                         "adaptiveIcon": {
                                 "foregroundImage": "./assets/adaptive-icon.png",
                                 "backgroundColor": "#ffffff"
-                        }
+                        },
+                        "permissions": [
+                                "ACCESS_FINE_LOCATION",
+                                "ACCESS_COARSE_LOCATION",
+                                "ACCESS_BACKGROUND_LOCATION"
+                        ]
                 },
                 "web": {
                         "favicon": "./assets/favicon.png"
                 },
-                "extra": {
-                        "eas": {
-                                "projectId": "a2359d83-864e-4619-a6db-723a44072e2b"
-                        }
-                }
+                "plugins": [
+                        [
+                                "expo-location",
+                                {
+                                        "locationAlwaysAndWhenInUsePermission": "This app needs location access to track field agent activities and voting locations.",
+                                        "locationAlwaysPermission": "This app needs location access to track field agent activities and voting locations.",
+                                        "locationWhenInUsePermission": "This app needs location access to track field agent activities and voting locations.",
+                                        "isIosBackgroundLocationEnabled": true,
+                                        "isAndroidBackgroundLocationEnabled": true
+                                }
+                        ]
+                ]
         }
 }

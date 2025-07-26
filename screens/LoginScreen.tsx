@@ -16,24 +16,31 @@ import {
 import { signInWithEmailAndPassword } from "firebase/auth"
 import { getAuth } from "firebase/auth"
 import { getDatabase, ref, push, set, update, get } from "firebase/database"
+import { getCurrentLocation } from "../utils/locationUtils"
 
 const LoginScreen = ({ navigation }) => {
         const [mobileNumber, setMobileNumber] = useState("")
         const [otp, setOtp] = useState("")
         const [userType, setUserType] = useState("फील्ड एजंट")
         const [loading, setLoading] = useState(false)
+        const [locationLoading, setLocationLoading] = useState(false)
         const auth = getAuth()
         const database = getDatabase()
 
-        const createUserSession = async (userId, phone, actualUserType) => {
+        const createUserSession = async (userId, phone, actualUserType, loginLocation) => {
                 try {
                         const sessionId = push(ref(database, `users/${userId}/sessions`)).key
                         const loginTime = new Date().toISOString()
 
-                        // Create session record
+                        // Create session record with location
                         await set(ref(database, `users/${userId}/sessions/${sessionId}`), {
                                 loginTime,
+                                loginLocation: loginLocation || null,
                                 logoutTime: null,
+                                logoutLocation: null,
+                                logoutType: null,
+                                slips_issued: 0,
+                                voting_done: 0,
                         })
 
                         // Update user info
@@ -41,7 +48,9 @@ const LoginScreen = ({ navigation }) => {
                                 phone,
                                 currentSession: sessionId,
                                 lastLogin: loginTime,
+                                loginLocation: loginLocation || null,
                                 userType: actualUserType, // Use the actual user type from database
+                                isActive: true,
                         })
 
                         return sessionId
@@ -101,7 +110,7 @@ const LoginScreen = ({ navigation }) => {
 
         const handleLogin = async () => {
                 if (!mobileNumber || !otp) {
-                        Alert.alert("त्रुटी", "कृपया मोबाईल नंबर आणि OTP भरा")
+                        Alert.alert("त्रुटी", "कृपया मोबाईल नंबर आणि पासवर्ड भरा")
                         return
                 }
 
@@ -111,6 +120,57 @@ const LoginScreen = ({ navigation }) => {
                 }
 
                 setLoading(true)
+                setLocationLoading(true)
+
+                try {
+                        // Get current location first
+                        const locationResult = await getCurrentLocation()
+                        setLocationLoading(false)
+
+                        let loginLocation = null
+                        if (locationResult.success) {
+                                loginLocation = locationResult.location
+                        } else {
+                                // Show location error but allow login to continue
+                                Alert.alert("स्थान त्रुटी", `${locationResult.error}\n\nतरीही लॉगिन करायचे?`, [
+                                        {
+                                                text: "रद्द करा",
+                                                style: "cancel",
+                                                onPress: () => {
+                                                        setLoading(false)
+                                                        return
+                                                },
+                                        },
+                                        {
+                                                text: "लॉगिन करा",
+                                                onPress: () => proceedWithLogin(null),
+                                        },
+                                ])
+                                return
+                        }
+
+                        await proceedWithLogin(loginLocation)
+                } catch (error) {
+                        console.error("Login error:", error)
+                        setLoading(false)
+                        setLocationLoading(false)
+
+                        let errorMessage = "लॉगिन करताना त्रुटी आली"
+                        if (error.code === "auth/user-not-found") {
+                                errorMessage = "हा मोबाईल नंबर नोंदणीकृत नाही. कृपया प्रथम नोंदणी करा."
+                        } else if (error.code === "auth/wrong-password") {
+                                errorMessage = "चुकीचा पासवर्ड"
+                        } else if (error.code === "auth/invalid-email") {
+                                errorMessage = "अवैध मोबाईल नंबर"
+                        } else if (error.code === "auth/too-many-requests") {
+                                errorMessage = "खूप जास्त प्रयत्न. कृपया काही वेळानंतर प्रयत्न करा."
+                        }
+
+                        Alert.alert("त्रुटी", errorMessage)
+                }
+        }
+
+        const proceedWithLogin = async (loginLocation) => {
                 try {
                         // Create email from mobile number
                         const email = `${mobileNumber}@gmail.com`
@@ -126,11 +186,12 @@ const LoginScreen = ({ navigation }) => {
                                 // Sign out the user since role validation failed
                                 await auth.signOut()
                                 Alert.alert("प्रवेश नाकारला", roleValidation.message)
+                                setLoading(false)
                                 return
                         }
 
-                        // Create session in database
-                        await createUserSession(user.uid, mobileNumber, roleValidation.actualUserType)
+                        // Create session in database with location
+                        await createUserSession(user.uid, mobileNumber, roleValidation.actualUserType, loginLocation)
 
                         // Navigate based on actual user type
                         if (roleValidation.actualUserType === "प्रशासन") {
@@ -150,11 +211,10 @@ const LoginScreen = ({ navigation }) => {
                         console.error("Login error:", error)
 
                         let errorMessage = "लॉगिन करताना त्रुटी आली"
-
                         if (error.code === "auth/user-not-found") {
                                 errorMessage = "हा मोबाईल नंबर नोंदणीकृत नाही. कृपया प्रथम नोंदणी करा."
                         } else if (error.code === "auth/wrong-password") {
-                                errorMessage = "चुकीचा OTP/पासवर्ड"
+                                errorMessage = "चुकीचा पासवर्ड"
                         } else if (error.code === "auth/invalid-email") {
                                 errorMessage = "अवैध मोबाईल नंबर"
                         } else if (error.code === "auth/too-many-requests") {
@@ -164,6 +224,7 @@ const LoginScreen = ({ navigation }) => {
                         Alert.alert("त्रुटी", errorMessage)
                 } finally {
                         setLoading(false)
+                        setLocationLoading(false)
                 }
         }
 
@@ -173,7 +234,7 @@ const LoginScreen = ({ navigation }) => {
                         <View style={styles.content}>
                                 {/* Celebration Image */}
                                 <View style={styles.imageContainer}>
-                                        <Image source={require("../assets/celebration.png")} style={styles.celebrationImage} resizeMode="contain" />
+                                        <Image source={require("../assets/hero.jpg")} style={styles.celebrationImage} resizeMode="contain" />
                                 </View>
 
                                 {/* Title */}
@@ -220,10 +281,17 @@ const LoginScreen = ({ navigation }) => {
                                                 value={otp}
                                                 onChangeText={setOtp}
                                                 secureTextEntry
-                                                keyboardType="phone-pad"
                                                 editable={!loading}
                                         />
                                 </View>
+
+                                {/* Location Status */}
+                                {locationLoading && (
+                                        <View style={styles.locationStatus}>
+                                                <ActivityIndicator size="small" color="#2196F3" />
+                                                <Text style={styles.locationText}>स्थान मिळवत आहे...</Text>
+                                        </View>
+                                )}
 
                                 {/* Login Button */}
                                 <TouchableOpacity
@@ -244,7 +312,6 @@ const LoginScreen = ({ navigation }) => {
                                 >
                                         <Text style={styles.registerButtonText}>खाते नाहीये का? आता नोंदणी करा.</Text>
                                 </TouchableOpacity>
-
                         </View>
                 </SafeAreaView>
         )
@@ -262,13 +329,14 @@ const styles = StyleSheet.create({
                 paddingBottom: 32,
         },
         imageContainer: {
-                alignItems: "center",
+                width: '100%', // Take full width
                 marginBottom: 32,
                 paddingTop: 20,
         },
         celebrationImage: {
-                width: 200,
-                height: 160,
+                width: '100%', // Take full width of container
+                height: undefined, // Let height be determined by aspect ratio
+                aspectRatio: 16 / 9, // Set your desired aspect ratio (e.g., 16:9)
         },
         title: {
                 fontSize: 24,
@@ -327,6 +395,20 @@ const styles = StyleSheet.create({
                 marginBottom: 16,
                 fontWeight: "400",
         },
+        locationStatus: {
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 20,
+                padding: 10,
+                backgroundColor: "#e3f2fd",
+                borderRadius: 8,
+        },
+        locationText: {
+                marginLeft: 8,
+                fontSize: 14,
+                color: "#1976d2",
+        },
         loginButton: {
                 backgroundColor: "#3B82F6",
                 borderRadius: 12,
@@ -363,24 +445,6 @@ const styles = StyleSheet.create({
                 color: "#ffffff",
                 fontSize: 16,
                 fontWeight: "500",
-        },
-        demoInfo: {
-                backgroundColor: "#F0F9FF",
-                borderRadius: 12,
-                padding: 16,
-                borderLeftWidth: 4,
-                borderLeftColor: "#3B82F6",
-        },
-        demoTitle: {
-                fontSize: 14,
-                fontWeight: "600",
-                color: "#1F2937",
-                marginBottom: 8,
-        },
-        demoText: {
-                fontSize: 12,
-                color: "#6B7280",
-                marginBottom: 4,
         },
 })
 

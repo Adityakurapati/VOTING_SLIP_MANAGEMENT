@@ -48,8 +48,9 @@
     "recharts": "^2.15.1",
     "victory": "^37.3.6",
     "expo-sharing": "~13.1.5",
+    "expo-media-library": "~17.1.7",
     "react-native-view-shot": "4.0.3",
-    "expo-media-library": "~17.1.7"
+    "expo-location": "~18.1.6"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",

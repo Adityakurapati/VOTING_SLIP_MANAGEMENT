@@ -1,83 +1,118 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { getDatabase, ref, onValue } from 'firebase/database';
+"use client"
 
-type UserType = 'फील्ड एजंट' | 'प्रशासन';
+import type React from "react"
+import { createContext, useContext, useState, useEffect } from "react"
+import { getAuth, onAuthStateChanged, type User } from "firebase/auth"
+import { getDatabase, ref, onValue } from "firebase/database"
+
+type UserType = "फील्ड एजंट" | "प्रशासन"
+
+interface UserData {
+        uid: string
+        phone: string
+        userType: UserType
+        fullName?: string
+        currentSession?: string
+        lastLogin?: string
+        loginLocation?: any
+        isActive?: boolean
+        total_slips_issued?: number
+        total_voting_done?: number
+        sessions?: any
+}
 
 interface UserContextType {
-        userType: UserType;
-        setUserType: (type: UserType) => void;
-        userId: string | null;
-        phoneNumber: string | null;
-        loading: boolean;
+        user: UserData | null
+        setUser: (user: UserData | null) => void
+        userType: UserType
+        setUserType: (type: UserType) => void
+        userId: string | null
+        phoneNumber: string | null
+        loading: boolean
 }
 
 const UserContext = createContext<UserContextType>({
-        userType: 'फील्ड एजंट',
+        user: null,
+        setUser: () => { },
+        userType: "फील्ड एजंट",
         setUserType: () => { },
         userId: null,
         phoneNumber: null,
         loading: true,
-});
+})
 
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-        const [userType, setUserType] = useState<UserType>('फील्ड एजंट');
-        const [userId, setUserId] = useState<string | null>(null);
-        const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
-        const [loading, setLoading] = useState(true);
+        const [user, setUser] = useState<UserData | null>(null)
+        const [userType, setUserType] = useState<UserType>("फील्ड एजंट")
+        const [userId, setUserId] = useState<string | null>(null)
+        const [phoneNumber, setPhoneNumber] = useState<string | null>(null)
+        const [loading, setLoading] = useState(true)
 
         useEffect(() => {
-                const auth = getAuth();
-                const database = getDatabase();
+                const auth = getAuth()
+                const database = getDatabase()
 
-                const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-                        if (user) {
-                                setUserId(user.uid);
+                const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser: User | null) => {
+                        if (firebaseUser) {
+                                setUserId(firebaseUser.uid)
 
                                 // Fetch user data from Realtime Database
-                                const userRef = ref(database, `users/${user.uid}`);
+                                const userRef = ref(database, `users/${firebaseUser.uid}`)
                                 const unsubscribeDB = onValue(userRef, (snapshot) => {
-                                        const userData = snapshot.val();
+                                        const userData = snapshot.val()
                                         if (userData) {
-                                                setPhoneNumber(userData.phone || null);
-                                                // If user type is stored in database, use that
-                                                if (userData.userType) {
-                                                        setUserType(userData.userType);
+                                                const userInfo: UserData = {
+                                                        uid: firebaseUser.uid,
+                                                        phone: userData.phone || "",
+                                                        userType: userData.userType || "फील्ड एजंट",
+                                                        fullName: userData.fullName,
+                                                        currentSession: userData.currentSession,
+                                                        lastLogin: userData.lastLogin,
+                                                        loginLocation: userData.loginLocation,
+                                                        isActive: userData.isActive,
+                                                        total_slips_issued: userData.total_slips_issued || 0,
+                                                        total_voting_done: userData.total_voting_done || 0,
+                                                        sessions: userData.sessions,
                                                 }
+
+                                                setUser(userInfo)
+                                                setPhoneNumber(userData.phone || null)
+                                                setUserType(userData.userType || "फील्ड एजंट")
                                         }
-                                        setLoading(false);
-                                });
+                                        setLoading(false)
+                                })
 
-                                return () => unsubscribeDB();
+                                return () => unsubscribeDB()
                         } else {
-                                setUserId(null);
-                                setPhoneNumber(null);
-                                setLoading(false);
+                                setUser(null)
+                                setUserId(null)
+                                setPhoneNumber(null)
+                                setLoading(false)
                         }
-                });
+                })
 
-                return () => unsubscribeAuth();
-        }, []);
+                return () => unsubscribeAuth()
+        }, [])
 
         const value = {
+                user,
+                setUser,
                 userType,
                 setUserType,
                 userId,
                 phoneNumber,
                 loading,
-        };
+        }
 
-        return (
-                <UserContext.Provider value={value}>
-                        {children}
-                </UserContext.Provider>
-        );
-};
+        return <UserContext.Provider value={value}>{children}</UserContext.Provider>
+}
 
 export const useUser = () => {
-        const context = useContext(UserContext);
+        const context = useContext(UserContext)
         if (!context) {
-                throw new Error('useUser must be used within a UserProvider');
+                throw new Error("useUser must be used within a UserProvider")
         }
-        return context;
-};
+        return context
+}
+
+export { UserContext }

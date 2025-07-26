@@ -10,6 +10,8 @@ import { AppState } from "react-native"
 import { getDatabase, ref, update, get } from "firebase/database"
 import { auth } from "./firebaseConfig"
 import { VoterProvider } from "./contexts/VoterContext"
+import { UserProvider } from "./contexts/UserContext"
+import { getCurrentLocation } from "./utils/locationUtils"
 
 // Import screens
 import LoginScreen from "./screens/LoginScreen"
@@ -25,205 +27,219 @@ const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
 
 function HomeTabs() {
-        return (
-                <Tab.Navigator
-                        screenOptions={({ route }) => ({
-                                tabBarIcon: ({ focused, color, size }) => {
-                                        let iconName
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName
 
-                                        if (route.name === "Dashboard") {
-                                                iconName = focused ? "home" : "home-outline"
-                                        } else if (route.name === "Members") {
-                                                iconName = focused ? "people" : "people-outline"
-                                        } else if (route.name === "SlipIssue") {
-                                                iconName = focused ? "document-text" : "document-text-outline"
-                                        } else if (route.name === "Profile") {
-                                                iconName = focused ? "person" : "person-outline"
-                                        }
+          if (route.name === "Dashboard") {
+            iconName = focused ? "home" : "home-outline"
+          } else if (route.name === "Members") {
+            iconName = focused ? "people" : "people-outline"
+          } else if (route.name === "SlipIssue") {
+            iconName = focused ? "document-text" : "document-text-outline"
+          } else if (route.name === "Profile") {
+            iconName = focused ? "person" : "person-outline"
+          }
 
-                                        return <Ionicons name={iconName} size={size} color={color} />
-                                },
-                                tabBarActiveTintColor: "#007AFF",
-                                tabBarInactiveTintColor: "gray",
-                                headerShown: false,
-                                tabBarLabelStyle: {
-                                        fontSize: 12,
-                                },
-                        })}
-                >
-                        <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ tabBarLabel: "डैशबोर्ड" }} />
-                        <Tab.Screen name="Members" component={MemberSearchScreen} options={{ tabBarLabel: "सदस्य" }} />
-                        <Tab.Screen name="SlipIssue" component={SlipIssueScreen} options={{ tabBarLabel: "स्लिप समस्या" }} />
-                        <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: "प्रोफाइल" }} />
-                </Tab.Navigator>
-        )
+          return <Ionicons name={iconName} size={size} color={color} />
+        },
+        tabBarActiveTintColor: "#007AFF",
+        tabBarInactiveTintColor: "gray",
+        headerShown: false,
+        tabBarLabelStyle: {
+          fontSize: 12,
+        },
+      })}
+    >
+      <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ tabBarLabel: "डैशबोर्ड" }} />
+      <Tab.Screen name="Members" component={MemberSearchScreen} options={{ tabBarLabel: "सदस्य" }} />
+      <Tab.Screen name="SlipIssue" component={SlipIssueScreen} options={{ tabBarLabel: "स्लिप समस्या" }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: "प्रोफाइल" }} />
+    </Tab.Navigator>
+  )
 }
 
 function FieldAgentNavigator() {
-        return (
-                <Stack.Navigator screenOptions={{ headerShown: false }}>
-                        <Stack.Screen name="HomeTabs" component={HomeTabs} />
-                        <Stack.Screen name="VoterDetail" component={VoterDetailScreen} />
-                </Stack.Navigator>
-        )
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="HomeTabs" component={HomeTabs} />
+      <Stack.Screen name="VoterDetail" component={VoterDetailScreen} />
+    </Stack.Navigator>
+  )
 }
 
 function AdminNavigator() {
-        return (
-                <Stack.Navigator screenOptions={{ headerShown: false }}>
-                        <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
-                </Stack.Navigator>
-        )
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+    </Stack.Navigator>
+  )
 }
 
 function AuthNavigator() {
-        return (
-                <Stack.Navigator screenOptions={{ headerShown: false }}>
-                        <Stack.Screen name="Login" component={LoginScreen} />
-                        <Stack.Screen name="Register" component={RegisterScreen} />
-                </Stack.Navigator>
-        )
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Register" component={RegisterScreen} />
+    </Stack.Navigator>
+  )
 }
 
 function AppNavigator() {
-        return (
-                <Stack.Navigator screenOptions={{ headerShown: false }}>
-                        <Stack.Screen name="Auth" component={AuthNavigator} />
-                        <Stack.Screen name="FieldAgent" component={FieldAgentNavigator} />
-                        <Stack.Screen name="Admin" component={AdminNavigator} />
-                </Stack.Navigator>
-        )
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Auth" component={AuthNavigator} />
+      <Stack.Screen name="FieldAgent" component={FieldAgentNavigator} />
+      <Stack.Screen name="Admin" component={AdminNavigator} />
+    </Stack.Navigator>
+  )
 }
 
 export default function App() {
-        const [user, setUser] = useState(null)
-        const [loading, setLoading] = useState(true)
-        const [lastActivity, setLastActivity] = useState(Date.now())
-        const database = getDatabase()
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [lastActivity, setLastActivity] = useState(Date.now())
+  const database = getDatabase()
 
-        // Auto logout functionality
-        useEffect(() => {
-                const INACTIVITY_TIMEOUT = 60 * 60 * 1000 // 1 hour in milliseconds
-                let inactivityTimer
+  // Auto logout functionality
+  useEffect(() => {
+    const INACTIVITY_TIMEOUT = 60 * 60 * 1000 // 1 hour in milliseconds
+    let inactivityTimer
 
-                const resetInactivityTimer = () => {
-                        setLastActivity(Date.now())
-                        clearTimeout(inactivityTimer)
-                        inactivityTimer = setTimeout(() => {
-                                handleAutoLogout()
-                        }, INACTIVITY_TIMEOUT)
-                }
+    const resetInactivityTimer = () => {
+      setLastActivity(Date.now())
+      clearTimeout(inactivityTimer)
+      inactivityTimer = setTimeout(() => {
+        handleAutoLogout()
+      }, INACTIVITY_TIMEOUT)
+    }
 
-                const handleAutoLogout = async () => {
-                        const currentUser = auth.currentUser
-                        if (currentUser) {
-                                try {
-                                        // Get current user data
-                                        const userRef = ref(database, `users/${currentUser.uid}`)
-                                        const snapshot = await get(userRef)
+    const handleAutoLogout = async () => {
+      const currentUser = auth.currentUser
+      if (currentUser) {
+        try {
+          // Get current location for logout
+          const locationResult = await getCurrentLocation()
+          const logoutLocation = locationResult.success ? locationResult.location : null
 
-                                        if (snapshot.exists()) {
-                                                const userData = snapshot.val()
-                                                if (userData.currentSession) {
-                                                        const logoutTime = new Date().toISOString()
+          // Get current user data
+          const userRef = ref(database, `users/${currentUser.uid}`)
+          const snapshot = await get(userRef)
 
-                                                        // Update current session with logout time and mark as auto logout
-                                                        await update(ref(database, `users/${currentUser.uid}/sessions/${userData.currentSession}`), {
-                                                                logoutTime,
-                                                                logoutType: "auto",
-                                                        })
+          if (snapshot.exists()) {
+            const userData = snapshot.val()
+            if (userData.currentSession) {
+              const logoutTime = new Date().toISOString()
 
-                                                        // Update user info
-                                                        await update(ref(database, `users/${currentUser.uid}`), {
-                                                                currentSession: null,
-                                                                lastLogout: logoutTime,
-                                                                isActive: false,
-                                                        })
-                                                }
-                                        }
+              // Update current session with logout time, location and mark as auto logout
+              await update(ref(database, `users/${currentUser.uid}/sessions/${userData.currentSession}`), {
+                logoutTime,
+                logoutLocation: logoutLocation || null,
+                logoutType: "auto",
+              })
 
-                                        // Sign out the user
-                                        await signOut(auth)
-                                } catch (error) {
-                                        console.error("Auto logout error:", error)
-                                }
-                        }
-                }
+              // Update user info
+              await update(ref(database, `users/${currentUser.uid}`), {
+                currentSession: null,
+                lastLogout: logoutTime,
+                logoutLocation: logoutLocation || null,
+                isActive: false,
+              })
+            }
+          }
 
-                // Handle app state changes for automatic logout
-                const handleAppStateChange = async (nextAppState) => {
-                        if (nextAppState === "background" || nextAppState === "inactive") {
-                                // App is going to background or becoming inactive
-                                const currentUser = auth.currentUser
-                                if (currentUser) {
-                                        try {
-                                                // Get current user data
-                                                const userRef = ref(database, `users/${currentUser.uid}`)
-                                                const snapshot = await get(userRef)
+          // Sign out the user
+          await signOut(auth)
+        } catch (error) {
+          console.error("Auto logout error:", error)
+        }
+      }
+    }
 
-                                                if (snapshot.exists()) {
-                                                        const userData = snapshot.val()
-                                                        if (userData.currentSession) {
-                                                                const logoutTime = new Date().toISOString()
+    // Handle app state changes for automatic logout
+    const handleAppStateChange = async (nextAppState) => {
+      if (nextAppState === "background" || nextAppState === "inactive") {
+        // App is going to background or becoming inactive
+        const currentUser = auth.currentUser
+        if (currentUser) {
+          try {
+            // Get current location for logout
+            const locationResult = await getCurrentLocation()
+            const logoutLocation = locationResult.success ? locationResult.location : null
 
-                                                                // Update current session with logout time and mark as auto logout
-                                                                await update(ref(database, `users/${currentUser.uid}/sessions/${userData.currentSession}`), {
-                                                                        logoutTime,
-                                                                        logoutType: "auto",
-                                                                })
+            // Get current user data
+            const userRef = ref(database, `users/${currentUser.uid}`)
+            const snapshot = await get(userRef)
 
-                                                                // Update user info
-                                                                await update(ref(database, `users/${currentUser.uid}`), {
-                                                                        currentSession: null,
-                                                                        lastLogout: logoutTime,
-                                                                        isActive: false,
-                                                                })
-                                                        }
-                                                }
+            if (snapshot.exists()) {
+              const userData = snapshot.val()
+              if (userData.currentSession) {
+                const logoutTime = new Date().toISOString()
 
-                                                // Sign out the user
-                                                await signOut(auth)
-                                        } catch (error) {
-                                                console.error("Auto logout error:", error)
-                                        }
-                                }
-                        } else if (nextAppState === "active") {
-                                // App is becoming active, reset inactivity timer
-                                resetInactivityTimer()
-                        }
-                }
-
-                const subscription = AppState.addEventListener("change", handleAppStateChange)
-
-                // Start inactivity timer when user is logged in
-                if (user) {
-                        resetInactivityTimer()
-                }
-
-                return () => {
-                        clearTimeout(inactivityTimer)
-                        subscription?.remove()
-                }
-        }, [user])
-
-        useEffect(() => {
-                const unsubscribe = onAuthStateChanged(auth, (user) => {
-                        setUser(user)
-                        setLoading(false)
+                // Update current session with logout time, location and mark as auto logout
+                await update(ref(database, `users/${currentUser.uid}/sessions/${userData.currentSession}`), {
+                  logoutTime,
+                  logoutLocation: logoutLocation || null,
+                  logoutType: "auto",
                 })
 
-                return unsubscribe
-        }, [])
+                // Update user info
+                await update(ref(database, `users/${currentUser.uid}`), {
+                  currentSession: null,
+                  lastLogout: logoutTime,
+                  logoutLocation: logoutLocation || null,
+                  isActive: false,
+                })
+              }
+            }
 
-        if (loading) {
-                return null
+            // Sign out the user
+            await signOut(auth)
+          } catch (error) {
+            console.error("Auto logout error:", error)
+          }
         }
+      } else if (nextAppState === "active") {
+        // App is becoming active, reset inactivity timer
+        resetInactivityTimer()
+      }
+    }
 
-        return (
-                <VoterProvider>
-                        <NavigationContainer>
-                                <AppNavigator />
-                        </NavigationContainer>
-                </VoterProvider>
-        )
+    const subscription = AppState.addEventListener("change", handleAppStateChange)
+
+    // Start inactivity timer when user is logged in
+    if (user) {
+      resetInactivityTimer()
+    }
+
+    return () => {
+      clearTimeout(inactivityTimer)
+      subscription?.remove()
+    }
+  }, [user])
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user)
+      setLoading(false)
+    })
+
+    return unsubscribe
+  }, [])
+
+  if (loading) {
+    return null
+  }
+
+  return (
+    <UserProvider>
+      <VoterProvider>
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </VoterProvider>
+    </UserProvider>
+  )
 }
