@@ -1,0 +1,93 @@
+{
+  "project_info": {
+    "project_number": "97667042020",
+    "firebase_url": "https://thirdeye-c5b2e-default-rtdb.firebaseio.com",
+    "project_id": "thirdeye-c5b2e",
+    "storage_bucket": "thirdeye-c5b2e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:97667042020:android:cf301a9289c5ae86fb7af1",
+        "android_client_info": {
+          "package_name": "com.adityai25.inshort"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "97667042020-0ocqf8angnror5llsbkkb9btkicpjlhi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.adityai25.inshort",
+            "certificate_hash": "d337051becaa3135f79f71321a4829137c744906"
+          }
+        },
+        {
+          "client_id": "97667042020-hcij0h2n1ruknpdq26ot6esjvcqkvgc6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBirwuJ7AYeRLhIMbgvsRED83TnCKn3Zdo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "97667042020-hcij0h2n1ruknpdq26ot6esjvcqkvgc6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:97667042020:android:7460c9cc518ae1e6fb7af1",
+        "android_client_info": {
+          "package_name": "com.adityai25.votingslipmanagement"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "97667042020-8gt98ntbo3ei6pq0ai57vu0d9dnqua13.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.adityai25.votingslipmanagement",
+            "certificate_hash": "abfd6ca1d7ab22c51b49f3fe519126f814b49898"
+          }
+        },
+        {
+          "client_id": "97667042020-g935tde1c615331bot048mbdevgtoiat.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.adityai25.votingslipmanagement",
+            "certificate_hash": "ca6bec4479c0a9440590f33f1792941fc9bbdc2c"
+          }
+        },
+        {
+          "client_id": "97667042020-hcij0h2n1ruknpdq26ot6esjvcqkvgc6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBirwuJ7AYeRLhIMbgvsRED83TnCKn3Zdo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "97667042020-hcij0h2n1ruknpdq26ot6esjvcqkvgc6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

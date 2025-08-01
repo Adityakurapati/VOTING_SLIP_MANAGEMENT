@@ -13,8 +13,8 @@ import {
         StatusBar,
         ActivityIndicator,
 } from "react-native"
-import { signInWithEmailAndPassword } from "firebase/auth"
-import { getAuth } from "firebase/auth"
+import { auth } from "../firebaseConfig"
+import { signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth"
 import { getDatabase, ref, push, set, update, get } from "firebase/database"
 import { getCurrentLocation } from "../utils/locationUtils"
 
@@ -24,7 +24,7 @@ const LoginScreen = ({ navigation }) => {
         const [userType, setUserType] = useState("फील्ड एजंट")
         const [loading, setLoading] = useState(false)
         const [locationLoading, setLocationLoading] = useState(false)
-        const auth = getAuth()
+        const [confirmation, setConfirmation] = useState(null)
         const database = getDatabase()
 
         const createUserSession = async (userId, phone, actualUserType, loginLocation) => {
@@ -32,7 +32,6 @@ const LoginScreen = ({ navigation }) => {
                         const sessionId = push(ref(database, `users/${userId}/sessions`)).key
                         const loginTime = new Date().toISOString()
 
-                        // Create session record with location
                         await set(ref(database, `users/${userId}/sessions/${sessionId}`), {
                                 loginTime,
                                 loginLocation: loginLocation || null,
@@ -43,13 +42,12 @@ const LoginScreen = ({ navigation }) => {
                                 voting_done: 0,
                         })
 
-                        // Update user info
                         await update(ref(database, `users/${userId}`), {
                                 phone,
                                 currentSession: sessionId,
                                 lastLogin: loginTime,
                                 loginLocation: loginLocation || null,
-                                userType: actualUserType, // Use the actual user type from database
+                                userType: actualUserType,
                                 isActive: true,
                         })
 
@@ -69,7 +67,6 @@ const LoginScreen = ({ navigation }) => {
                                 const userData = snapshot.val()
                                 const actualUserType = userData.userType
 
-                                // If user selected admin but their role is not admin
                                 if (selectedUserType === "प्रशासन" && actualUserType !== "प्रशासन") {
                                         return {
                                                 isValid: false,
@@ -78,7 +75,6 @@ const LoginScreen = ({ navigation }) => {
                                         }
                                 }
 
-                                // If user selected field agent but their role is admin
                                 if (selectedUserType === "फील्ड एजंट" && actualUserType === "प्रशासन") {
                                         return {
                                                 isValid: false,
@@ -108,14 +104,40 @@ const LoginScreen = ({ navigation }) => {
                 }
         }
 
-        const handleLogin = async () => {
-                if (!mobileNumber || !otp) {
-                        Alert.alert("त्रुटी", "कृपया मोबाईल नंबर आणि पासवर्ड भरा")
+        const sendOTP = async () => {
+                if (!mobileNumber || mobileNumber.length !== 10) {
+                        Alert.alert("त्रुटी", "कृपया वैध 10 अंकी मोबाईल नंबर भरा")
                         return
                 }
 
-                if (mobileNumber.length !== 10) {
-                        Alert.alert("त्रुटी", "कृपया वैध 10 अंकी मोबाईल नंबर भरा")
+                setLoading(true)
+                try {
+                        const phoneNumber = `+91${mobileNumber}`
+                        const recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+                                size: 'invisible',
+                                callback: () => { }
+                        })
+
+                        const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier)
+                        setConfirmation(confirmationResult)
+                        Alert.alert("यशस्वी", "OTP पाठवला गेला आहे")
+                } catch (error) {
+                        console.error("OTP sending error:", error)
+                        let errorMessage = "OTP पाठवताना त्रुटी आली"
+                        if (error.code === "auth/invalid-phone-number") {
+                                errorMessage = "अवैध मोबाईल नंबर"
+                        } else if (error.code === "auth/too-many-requests") {
+                                errorMessage = "खूप जास्त प्रयत्न. कृपया काही वेळानंतर प्रयत्न करा."
+                        }
+                        Alert.alert("त्रुटी", errorMessage)
+                } finally {
+                        setLoading(false)
+                }
+        }
+
+        const verifyOTP = async () => {
+                if (!otp || otp.length !== 6) {
+                        Alert.alert("त्रुटी", "कृपया वैध 6 अंकी OTP भरा")
                         return
                 }
 
@@ -131,7 +153,6 @@ const LoginScreen = ({ navigation }) => {
                         if (locationResult.success) {
                                 loginLocation = locationResult.location
                         } else {
-                                // Show location error but allow login to continue
                                 Alert.alert("स्थान त्रुटी", `${locationResult.error}\n\nतरीही लॉगिन करायचे?`, [
                                         {
                                                 text: "रद्द करा",
@@ -154,36 +175,20 @@ const LoginScreen = ({ navigation }) => {
                         console.error("Login error:", error)
                         setLoading(false)
                         setLocationLoading(false)
-
-                        let errorMessage = "लॉगिन करताना त्रुटी आली"
-                        if (error.code === "auth/user-not-found") {
-                                errorMessage = "हा मोबाईल नंबर नोंदणीकृत नाही. कृपया प्रथम नोंदणी करा."
-                        } else if (error.code === "auth/wrong-password") {
-                                errorMessage = "चुकीचा पासवर्ड"
-                        } else if (error.code === "auth/invalid-email") {
-                                errorMessage = "अवैध मोबाईल नंबर"
-                        } else if (error.code === "auth/too-many-requests") {
-                                errorMessage = "खूप जास्त प्रयत्न. कृपया काही वेळानंतर प्रयत्न करा."
-                        }
-
-                        Alert.alert("त्रुटी", errorMessage)
+                        Alert.alert("त्रुटी", "OTP सत्यापन करताना त्रुटी आली")
                 }
         }
 
         const proceedWithLogin = async (loginLocation) => {
                 try {
-                        // Create email from mobile number
-                        const email = `${mobileNumber}@gmail.com`
-
-                        // Sign in with Firebase Auth
-                        const userCredential = await signInWithEmailAndPassword(auth, email, otp)
+                        // Verify OTP
+                        const userCredential = await confirmation.confirm(otp)
                         const user = userCredential.user
 
                         // Validate user role
                         const roleValidation = await validateUserRole(user.uid, userType)
 
                         if (!roleValidation.isValid) {
-                                // Sign out the user since role validation failed
                                 await auth.signOut()
                                 Alert.alert("प्रवेश नाकारला", roleValidation.message)
                                 setLoading(false)
@@ -195,13 +200,11 @@ const LoginScreen = ({ navigation }) => {
 
                         // Navigate based on actual user type
                         if (roleValidation.actualUserType === "प्रशासन") {
-                                // Reset navigation stack and go to Admin
                                 navigation.reset({
                                         index: 0,
                                         routes: [{ name: "Admin" }],
                                 })
                         } else {
-                                // Reset navigation stack and go to Field Agent
                                 navigation.reset({
                                         index: 0,
                                         routes: [{ name: "FieldAgent" }],
@@ -209,18 +212,12 @@ const LoginScreen = ({ navigation }) => {
                         }
                 } catch (error) {
                         console.error("Login error:", error)
-
-                        let errorMessage = "लॉगिन करताना त्रुटी आली"
-                        if (error.code === "auth/user-not-found") {
-                                errorMessage = "हा मोबाईल नंबर नोंदणीकृत नाही. कृपया प्रथम नोंदणी करा."
-                        } else if (error.code === "auth/wrong-password") {
-                                errorMessage = "चुकीचा पासवर्ड"
-                        } else if (error.code === "auth/invalid-email") {
-                                errorMessage = "अवैध मोबाईल नंबर"
-                        } else if (error.code === "auth/too-many-requests") {
-                                errorMessage = "खूप जास्त प्रयत्न. कृपया काही वेळानंतर प्रयत्न करा."
+                        let errorMessage = "OTP सत्यापन करताना त्रुटी आली"
+                        if (error.code === "auth/invalid-verification-code") {
+                                errorMessage = "चुकीचा OTP"
+                        } else if (error.code === "auth/code-expired") {
+                                errorMessage = "OTP कालबाह्य झाला आहे. कृपया नवीन OTP मागवा."
                         }
-
                         Alert.alert("त्रुटी", errorMessage)
                 } finally {
                         setLoading(false)
@@ -271,18 +268,21 @@ const LoginScreen = ({ navigation }) => {
                                                 onChangeText={setMobileNumber}
                                                 keyboardType="phone-pad"
                                                 maxLength={10}
-                                                editable={!loading}
+                                                editable={!loading && !confirmation}
                                         />
 
-                                        <TextInput
-                                                style={styles.input}
-                                                placeholder="पासवर्ड"
-                                                placeholderTextColor="#9CA3AF"
-                                                value={otp}
-                                                onChangeText={setOtp}
-                                                secureTextEntry
-                                                editable={!loading}
-                                        />
+                                        {confirmation ? (
+                                                <TextInput
+                                                        style={styles.input}
+                                                        placeholder="OTP"
+                                                        placeholderTextColor="#9CA3AF"
+                                                        value={otp}
+                                                        onChangeText={setOtp}
+                                                        keyboardType="number-pad"
+                                                        maxLength={6}
+                                                        editable={!loading}
+                                                />
+                                        ) : null}
                                 </View>
 
                                 {/* Location Status */}
@@ -294,14 +294,25 @@ const LoginScreen = ({ navigation }) => {
                                 )}
 
                                 {/* Login Button */}
-                                <TouchableOpacity
-                                        style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-                                        onPress={handleLogin}
-                                        activeOpacity={0.8}
-                                        disabled={loading}
-                                >
-                                        {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.loginButtonText}>लॉगिन करा</Text>}
-                                </TouchableOpacity>
+                                {confirmation ? (
+                                        <TouchableOpacity
+                                                style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                                                onPress={verifyOTP}
+                                                activeOpacity={0.8}
+                                                disabled={loading}
+                                        >
+                                                {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.loginButtonText}>OTP सत्यापित करा</Text>}
+                                        </TouchableOpacity>
+                                ) : (
+                                        <TouchableOpacity
+                                                style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                                                onPress={sendOTP}
+                                                activeOpacity={0.8}
+                                                disabled={loading}
+                                        >
+                                                {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.loginButtonText}>OTP मिळवा</Text>}
+                                        </TouchableOpacity>
+                                )}
 
                                 {/* Register Button */}
                                 <TouchableOpacity
@@ -312,10 +323,14 @@ const LoginScreen = ({ navigation }) => {
                                 >
                                         <Text style={styles.registerButtonText}>खाते नाहीये का? आता नोंदणी करा.</Text>
                                 </TouchableOpacity>
+
+                                {/* Hidden reCAPTCHA container */}
+                                <View id="recaptcha-container" style={{ display: 'none' }} />
                         </View>
                 </SafeAreaView>
         )
 }
+
 
 const styles = StyleSheet.create({
         container: {
