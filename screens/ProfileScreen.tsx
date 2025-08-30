@@ -13,15 +13,14 @@ import {
         ActivityIndicator,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import { getAuth, signOut } from "firebase/auth"
-import { getDatabase, ref, update, onValue, get } from "firebase/database"
+import { signOut } from "firebase/auth"
+import { auth, database } from "../firebaseConfig"
+import { ref, update, onValue, get } from "firebase/database"
 
 const ProfileScreen = ({ navigation }) => {
         const [userInfo, setUserInfo] = useState(null)
         const [loading, setLoading] = useState(true)
         const [loggingOut, setLoggingOut] = useState(false)
-        const auth = getAuth()
-        const database = getDatabase()
 
         useEffect(() => {
                 const user = auth.currentUser
