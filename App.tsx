@@ -5,10 +5,9 @@ import { NavigationContainer } from "@react-navigation/native"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { Ionicons } from "@expo/vector-icons"
-import { onAuthStateChanged, signOut } from "firebase/auth"
 import { AppState } from "react-native"
 import { getDatabase, ref, update, get } from "firebase/database"
-import { auth } from "./firebaseConfig"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 import { VoterProvider } from "./contexts/VoterContext"
 import { UserProvider } from "./contexts/UserContext"
 import { getCurrentLocation } from "./utils/locationUtils"
@@ -43,7 +42,7 @@ function HomeTabs() {
             iconName = focused ? "person" : "person-outline"
           }
 
-          return <Ionicons name={iconName} size={size} color={color} />
+          return <Ionicons name={iconName as any} size={size} color={color} />
         },
         tabBarActiveTintColor: "#007AFF",
         tabBarInactiveTintColor: "gray",
@@ -98,15 +97,24 @@ function AppNavigator() {
 }
 
 export default function App() {
-  const [user, setUser] = useState(null)
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false)
   const [loading, setLoading] = useState(true)
   const [lastActivity, setLastActivity] = useState(Date.now())
   const database = getDatabase()
 
+  const getSession = async (): Promise<{ userId?: string; currentSession?: string } | null> => {
+    try {
+      const raw = await AsyncStorage.getItem("session")
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  }
+
   // Auto logout functionality
   useEffect(() => {
     const INACTIVITY_TIMEOUT = 60 * 60 * 1000 // 1 hour in milliseconds
-    let inactivityTimer
+    let inactivityTimer: any
 
     const resetInactivityTimer = () => {
       setLastActivity(Date.now())
@@ -117,15 +125,16 @@ export default function App() {
     }
 
     const handleAutoLogout = async () => {
-      const currentUser = auth.currentUser
-      if (currentUser) {
+      const session = await getSession()
+      const userId = session?.userId
+      if (userId) {
         try {
           // Get current location for logout
           const locationResult = await getCurrentLocation()
           const logoutLocation = locationResult.success ? locationResult.location : null
 
           // Get current user data
-          const userRef = ref(database, `users/${currentUser.uid}`)
+          const userRef = ref(database, `users/${userId}`)
           const snapshot = await get(userRef)
 
           if (snapshot.exists()) {
@@ -134,14 +143,14 @@ export default function App() {
               const logoutTime = new Date().toISOString()
 
               // Update current session with logout time, location and mark as auto logout
-              await update(ref(database, `users/${currentUser.uid}/sessions/${userData.currentSession}`), {
+              await update(ref(database, `users/${userId}/sessions/${userData.currentSession}`), {
                 logoutTime,
                 logoutLocation: logoutLocation || null,
                 logoutType: "auto",
               })
 
               // Update user info
-              await update(ref(database, `users/${currentUser.uid}`), {
+              await update(ref(database, `users/${userId}`), {
                 currentSession: null,
                 lastLogout: logoutTime,
                 logoutLocation: logoutLocation || null,
@@ -150,8 +159,8 @@ export default function App() {
             }
           }
 
-          // Sign out the user
-          await signOut(auth)
+          await AsyncStorage.removeItem("session")
+          setIsLoggedIn(false)
         } catch (error) {
           console.error("Auto logout error:", error)
         }
@@ -159,18 +168,16 @@ export default function App() {
     }
 
     // Handle app state changes for automatic logout
-    const handleAppStateChange = async (nextAppState) => {
+    const handleAppStateChange = async (nextAppState: string) => {
       if (nextAppState === "background" || nextAppState === "inactive") {
-        // App is going to background or becoming inactive
-        const currentUser = auth.currentUser
-        if (currentUser) {
+        const session = await getSession()
+        const userId = session?.userId
+        if (userId) {
           try {
-            // Get current location for logout
             const locationResult = await getCurrentLocation()
             const logoutLocation = locationResult.success ? locationResult.location : null
 
-            // Get current user data
-            const userRef = ref(database, `users/${currentUser.uid}`)
+            const userRef = ref(database, `users/${userId}`)
             const snapshot = await get(userRef)
 
             if (snapshot.exists()) {
@@ -178,15 +185,13 @@ export default function App() {
               if (userData.currentSession) {
                 const logoutTime = new Date().toISOString()
 
-                // Update current session with logout time, location and mark as auto logout
-                await update(ref(database, `users/${currentUser.uid}/sessions/${userData.currentSession}`), {
+                await update(ref(database, `users/${userId}/sessions/${userData.currentSession}`), {
                   logoutTime,
                   logoutLocation: logoutLocation || null,
                   logoutType: "auto",
                 })
 
-                // Update user info
-                await update(ref(database, `users/${currentUser.uid}`), {
+                await update(ref(database, `users/${userId}`), {
                   currentSession: null,
                   lastLogout: logoutTime,
                   logoutLocation: logoutLocation || null,
@@ -195,22 +200,21 @@ export default function App() {
               }
             }
 
-            // Sign out the user
-            await signOut(auth)
+            await AsyncStorage.removeItem("session")
+            setIsLoggedIn(false)
           } catch (error) {
             console.error("Auto logout error:", error)
           }
         }
       } else if (nextAppState === "active") {
-        // App is becoming active, reset inactivity timer
         resetInactivityTimer()
       }
     }
 
-    const subscription = AppState.addEventListener("change", handleAppStateChange)
+    const subscription = AppState.addEventListener("change", handleAppStateChange as any)
 
     // Start inactivity timer when user is logged in
-    if (user) {
+    if (isLoggedIn) {
       resetInactivityTimer()
     }
 
@@ -218,15 +222,15 @@ export default function App() {
       clearTimeout(inactivityTimer)
       subscription?.remove()
     }
-  }, [user])
+  }, [isLoggedIn])
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user)
+    // Initialize login state from session
+    ;(async () => {
+      const session = await getSession()
+      setIsLoggedIn(!!session?.userId)
       setLoading(false)
-    })
-
-    return unsubscribe
+    })()
   }, [])
 
   if (loading) {

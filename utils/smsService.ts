@@ -6,8 +6,7 @@ export const sendOTP = async (
   try {
     console.log(`[OTP Service] Preparing to send OTP to ${phoneNumber}`);
 
-    const key = process.env.key;
-    const url = `https://www.fast2sms.com/dev/bulkV2?authorization=${key}&route=q&message=Your%20OTP%20is%20${otp}&numbers=${phoneNumber}&flash=0`;
+    const url = `https://www.fast2sms.com/dev/bulkV2?authorization=jI09K5duyM1rqbNWPiOzRshVH4xAStwpDGJUZ2CQgn7FTL6XlfZEfSc5YGKtDqMTzhV3WPl9OQXRrw7s&route=q&message=${otp}&numbers=${phoneNumber}&flash=0`;
     console.log(`[OTP Service] Request URL: ${url}`);
 
     const response = await fetch(url);
