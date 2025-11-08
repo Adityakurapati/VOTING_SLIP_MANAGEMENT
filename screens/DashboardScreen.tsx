@@ -14,51 +14,22 @@ import {
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useVoters } from "../contexts/VoterContext"
-import { ref, onValue } from "firebase/database"
-import { database } from "../firebaseConfig"
+
+// Import the local dataset
+import localDataset from "../contexts/dataset.json"
 
 // Hardcoded data structure based on your requirements
 const VILLAGE_DATA = {
-        दारुंब्रे: {
-                "यादी भाग ३८७": [""], // Empty array means no further division
-        },
-        इंदुरी: {
-                "भाग - २२३": [
-                        "इंदुरी गावठाण इंदुरी",
-                        "इंदुरी बाजारपेठ इंदुरी",
-                        "काशिद चाळ इंदुरी",
-                        "इंदुरी बाजारपेठ मागील भाग इंदुरी",
-                        "खांदवे चाळ इंदुरी",
-                        "शिदीया मागील भाग इंदुरी",
-                        "विष्णु मंदीर इंदुरी",
-                        "पवारवाडा इंदुरी",
-                        "काशिद मळा इंदुरी",
-                        "काशिद विट भट्टी इंदुरी",
-                        "राऊत्त विट भट्टी इंदुरी",
-                        "गावठाण इंदुरी",
+        "इंदुरी": {
+                "२२३ गावठाण इंदुरी": [
+                        "इंदुरी_गावठाण_इंदुरी", "इंदुरी_बाजारपेठ_इंदुरी", "इंदुरी_बाजारपेठ_मागील_भाग_इंदुरी", "काशिद_चाळ_इंदुरी", "काशिद_मळा_इंदुरी", "काशिद_विट_भट्टी_इंदुरी", "खांदवे_चाळ_इंदुरी", "गावठाण_इंदुरी", "पवारवाडा_इंदुरी", "राऊत_विट_भट्टी_इंदुरी", "विष्णु_मंदिर_इंदुरी", "शिदीया_मागील_भाग_इंदुरी"
                 ],
-                "भाग - २२४": ["गावठाण इंदुरी", "सुतार वस्ती गावठाण इंदुरी", "गायकवाड वाडा गावठाण इंदुरी", "कॅडबरी वस्ती इंदुरी"],
-                "भाग - २२५": ["ठाकरवाडी इंदुरी", "पुनर्वसन वसाहत इंदुरी", "पानसरे वस्ती इंदुरी", "कुंडमळा इंदुरी"],
-        },
-        जांबवडे: {
-                "यादी भाग १९९": [""],
-        },
-        मालवाडी: {
-                "यादी भाग १९०": [""],
-                "यादी भाग १९१": [""],
-        },
-        "नवलाख उंब्रे": {
-                "यादी भाग ११८": [""],
-        },
-        साळुंब्रे: {
-                "यादी भाग ३८३": [""],
-        },
-        शिरगाव: {
-                "यादी भाग ३५१": [""],
-        },
-        सुदुंब्रे: {
-                "यादी भाग २००": [""],
-        },
+                "२२४ गावठाण इंदुरी": ["गावठाण इंदुरी", "सुतार वस्ती गावठाण इंदुरी", "गायकवाड वाडा गावठाण इंदुरी", "कॅडबरी वस्ती इंदुरी"],
+                "२२५ कुंडमळा इंदुरी": [],
+                "२२६ गावठाण वस्ती इंदुरी": ["कांदे वस्ती इंदुरी", "कुंडमळा इंदुरी", "गावठाण वस्ती इंदुरी", "प्रगती नगर इंदुरी"],
+                "२२७ गावठाण इंदुरी": ["इंदुरी_गावठाण_इंदुरी", "ओव्हरसीस_इलेव्हेटोर", "कांदे_वस्ती_इंदुरी", "गावठाण_इंदुरी", "ठाकरवाडी_इंदुरी"],
+                "२२८ भागवत मळा इंदुरी": [],
+        }
 }
 
 const DashboardScreen = ({ navigation }) => {
@@ -77,42 +48,57 @@ const DashboardScreen = ({ navigation }) => {
 
         const { refreshVoters, loading } = useVoters()
 
-        // Function to calculate statistics from Firebase data
+        // Function to calculate statistics from local dataset
         const calculateStats = (village: string, bhag: string, vibhag: string) => {
-                const villagesRef = ref(database, "villages")
+                try {
+                        const villageData = localDataset[village as keyof typeof localDataset]
 
-                onValue(villagesRef, (snapshot) => {
-                        const data = snapshot.val()
-                        if (data && data[village] && data[village][bhag] && data[village][bhag][vibhag]) {
-                                const voterList = data[village][bhag][vibhag]["मतदार_यादी"] || {}
-
-                                let totalVoters = 0
-                                let slipIssued = 0
-                                let votingDone = 0
-
-                                Object.values(voterList).forEach((voter: any) => {
-                                        totalVoters++
-                                        if (voter["स्लिप_जारी_केली"] === true || voter["स्लिप जारी केली"] === true) {
-                                                slipIssued++
-                                        }
-                                        if (voter["मतदान_झाले"] === true || voter["मतदान झाले"] === true) {
-                                                votingDone++
-                                        }
-                                })
-
-                                setStats({
-                                        totalVoters,
-                                        slipIssued,
-                                        votingDone,
-                                })
-                        } else {
-                                setStats({
-                                        totalVoters: 0,
-                                        slipIssued: 0,
-                                        votingDone: 0,
-                                })
+                        if (!villageData) {
+                                setStats({ totalVoters: 0, slipIssued: 0, votingDone: 0 })
+                                return
                         }
-                })
+
+                        const divisionData = villageData[bhag as keyof typeof villageData]
+                        if (!divisionData) {
+                                setStats({ totalVoters: 0, slipIssued: 0, votingDone: 0 })
+                                return
+                        }
+
+                        const vibhagData = divisionData[vibhag as keyof typeof divisionData]
+                        if (!vibhagData) {
+                                setStats({ totalVoters: 0, slipIssued: 0, votingDone: 0 })
+                                return
+                        }
+
+                        const voterList = vibhagData["मतदार_यादी"]
+                        if (!voterList || !Array.isArray(voterList)) {
+                                setStats({ totalVoters: 0, slipIssued: 0, votingDone: 0 })
+                                return
+                        }
+
+                        let totalVoters = 0
+                        let slipIssued = 0
+                        let votingDone = 0
+
+                        voterList.forEach((voter: any) => {
+                                totalVoters++
+                                if (voter["स्लिप जारी केली"] === true) {
+                                        slipIssued++
+                                }
+                                if (voter["मतदान झाले"] === true) {
+                                        votingDone++
+                                }
+                        })
+
+                        setStats({
+                                totalVoters,
+                                slipIssued,
+                                votingDone,
+                        })
+                } catch (error) {
+                        console.error("Error calculating stats:", error)
+                        setStats({ totalVoters: 0, slipIssued: 0, votingDone: 0 })
+                }
         }
 
         // Update stats when selection changes

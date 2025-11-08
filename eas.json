@@ -1,10 +1,17 @@
 {
+        "cli": {
+                "appVersionSource": "local"
+        },
         "build": {
-                "android": {
-                        "gradleCommand": ":app:assembleRelease",
-                        "buildType": "apk",
-                        "compileSdkVersion": 33,
-                        "targetSdkVersion": 33
+                "apk": {
+                        "android": {
+                                "buildType": "apk"
+                        }
+                },
+                "production": {
+                        "android": {
+                                "gradleCommand": ":app:bundleRelease"
+                        }
                 }
         }
 }

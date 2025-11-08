@@ -2,9 +2,10 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useCallback } from "react"
-import { ref, onValue, update, runTransaction, push } from "firebase/database" // add runTransaction (and push if needed) for safe counter updates
-import { database } from "../firebaseConfig"
-import AsyncStorage from "@react-native-async-storage/async-storage" // read agent session info for per-session tracking
+import AsyncStorage from "@react-native-async-storage/async-storage"
+
+// Import the local dataset
+import localDataset from "./dataset.json"
 
 interface Voter {
         firebaseKey: string
@@ -72,45 +73,64 @@ export const VoterProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         setCurrentVibhag(vibhag)
 
                         try {
-                                const votersRef = ref(database, `villages/${village}/${division}/${vibhag}/मतदार_यादी`)
+                                // Use local dataset instead of Firebase
+                                const villageData = localDataset[village as keyof typeof localDataset]
 
-                                return new Promise<void>((resolve, reject) => {
-                                        const unsubscribe = onValue(
-                                                votersRef,
-                                                (snapshot) => {
-                                                        try {
-                                                                const data = snapshot.val()
-                                                                if (data) {
-                                                                        const votersData = Object.entries(data).map(([key, value]) => ({
-                                                                                ...(value as any),
-                                                                                firebaseKey: key,
-                                                                                village,
-                                                                                division,
-                                                                                vibhag,
-                                                                        }))
-                                                                        setVoters(votersData)
-                                                                        resolve()
-                                                                } else {
-                                                                        setVoters([])
-                                                                        setError("No voters found in this area")
-                                                                        reject("No voters found")
-                                                                }
-                                                        } catch (err: any) {
-                                                                setError(err.message)
-                                                                reject(err)
-                                                        } finally {
-                                                                setLoading(false)
-                                                        }
-                                                },
-                                                (error) => {
-                                                        setError(error.message)
-                                                        setLoading(false)
-                                                        reject(error)
-                                                },
-                                        )
+                                if (!villageData) {
+                                        setVoters([])
+                                        setError("Village not found in dataset")
+                                        setLoading(false)
+                                        return
+                                }
 
-                                        return () => unsubscribe()
-                                })
+                                const divisionData = villageData[division as keyof typeof villageData]
+                                if (!divisionData) {
+                                        setVoters([])
+                                        setError("Division not found in dataset")
+                                        setLoading(false)
+                                        return
+                                }
+
+                                const vibhagData = divisionData[vibhag as keyof typeof divisionData]
+                                if (!vibhagData) {
+                                        setVoters([])
+                                        setError("Vibhag not found in dataset")
+                                        setLoading(false)
+                                        return
+                                }
+
+                                const voterList = vibhagData["मतदार_यादी"]
+                                if (!voterList || !Array.isArray(voterList)) {
+                                        setVoters([])
+                                        setError("No voters found in this area")
+                                        setLoading(false)
+                                        return
+                                }
+
+                                // Transform the data to match the expected structure
+                                const votersData = voterList.map((voter: any, index: number) => ({
+                                        ...voter,
+                                        firebaseKey: index.toString(),
+                                        village,
+                                        division,
+                                        vibhag,
+                                        // Map field names to match the expected structure in the app
+                                        "नाव": voter["मतदाराचे_पूर्ण_नांव"] || voter["नाव"] || "",
+                                        "मोबाईल_नंबर": voter["मोबाईल_नंबर"] || "",
+                                        "पत्ता": voter["पत्ता"] || "",
+                                        "वय": voter["वय"] || "",
+                                        "लिंग": voter["लिंग"] || "",
+                                        "क्रमांक": voter["क्रमांक"] || "",
+                                        "मतदार_ओळखपत्र_क्रमांक": voter["मतदार_ओळखपत्र_क्रमांक"] || "",
+                                        "स्लिप जारी केली": voter["स्लिप जारी केली"] || false,
+                                        "मतदान झाले": voter["मतदान झाले"] || false,
+                                        // Handle parent names
+                                        "पिता_नाव": voter["वडिलांचे_नाव"] || voter["पिता_नाव"] || "",
+                                        "पती_नाव": voter["पतीचे_नाव"] || voter["पती_नाव"] || "",
+                                }))
+
+                                setVoters(votersData)
+                                setLoading(false)
                         } catch (err: any) {
                                 setError(err.message)
                                 setLoading(false)
@@ -131,14 +151,7 @@ export const VoterProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         clearError()
 
                         try {
-                                // Update the voter record first
-                                const voterRef = ref(
-                                        database,
-                                        `villages/${voter.village}/${voter.division}/${voter.vibhag}/मतदार_यादी/${voter.firebaseKey}`,
-                                )
-
-                                await update(voterRef, { [field]: value })
-
+                                // Since we're using local data, we'll just update the local state
                                 // Optimistic update for the local list
                                 setVoters((prevVoters) =>
                                         prevVoters.map((v) => (v.firebaseKey === voter.firebaseKey ? { ...v, [field]: value } : v)),
@@ -149,6 +162,7 @@ export const VoterProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                                         const isSlipField = field.includes("स्लिप")
                                         const isVotingField = field.includes("मतदान")
                                         if (!isSlipField && !isVotingField) {
+                                                setLoading(false)
                                                 return true // nothing else to track
                                         }
 
@@ -160,6 +174,7 @@ export const VoterProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                                         else if (!newVal && prevVal) delta = -1
 
                                         if (delta === 0) {
+                                                setLoading(false)
                                                 return true // no counter change
                                         }
 
@@ -171,60 +186,67 @@ export const VoterProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
                                         if (!userId || !sessionId) {
                                                 // No active session to attribute work to
+                                                setLoading(false)
                                                 return true
                                         }
 
+                                        // For local storage, we'll use AsyncStorage to track metrics
                                         const metricKey = isSlipField ? "slips_issued" : "voting_done"
-
-                                        // Transactionally update session-level aggregate counter
-                                        await runTransaction(ref(database, `users/${userId}/sessions/${sessionId}/${metricKey}`), (current) =>
-                                                typeof current === "number" ? current + delta : delta,
-                                        )
-
-                                        // Also maintain user-level total counters
                                         const userTotalKey = isSlipField ? "total_slips_issued" : "total_voting_done"
-                                        await runTransaction(ref(database, `users/${userId}/${userTotalKey}`), (current) =>
-                                                typeof current === "number" ? current + delta : delta,
-                                        )
 
-                                        // Track per-section counters for this session to support admin breakdowns
+                                        // Update session metrics in AsyncStorage
+                                        const sessionMetricsKey = `session_${sessionId}_metrics`
+                                        const sessionMetricsRaw = await AsyncStorage.getItem(sessionMetricsKey)
+                                        const sessionMetrics = sessionMetricsRaw ? JSON.parse(sessionMetricsRaw) : {}
+
+                                        sessionMetrics[metricKey] = (sessionMetrics[metricKey] || 0) + delta
+                                        await AsyncStorage.setItem(sessionMetricsKey, JSON.stringify(sessionMetrics))
+
+                                        // Update user total metrics
+                                        const userMetricsKey = `user_${userId}_metrics`
+                                        const userMetricsRaw = await AsyncStorage.getItem(userMetricsKey)
+                                        const userMetrics = userMetricsRaw ? JSON.parse(userMetricsRaw) : {}
+
+                                        userMetrics[userTotalKey] = (userMetrics[userTotalKey] || 0) + delta
+                                        await AsyncStorage.setItem(userMetricsKey, JSON.stringify(userMetrics))
+
+                                        // Track per-section counters
                                         const vVillage = sanitizeKey(voter.village)
                                         const vDivision = sanitizeKey(voter.division)
                                         const vVibhag = sanitizeKey(voter.vibhag)
 
-                                        await runTransaction(
-                                                ref(
-                                                        database,
-                                                        `users/${userId}/sessions/${sessionId}/sections/${vVillage}/${vDivision}/${vVibhag}/${metricKey}`,
-                                                ),
-                                                (current) => (typeof current === "number" ? current + delta : delta),
-                                        )
+                                        const sectionKey = `section_${vVillage}_${vDivision}_${vVibhag}_${metricKey}`
+                                        const sectionCountRaw = await AsyncStorage.getItem(sectionKey)
+                                        const sectionCount = sectionCountRaw ? parseInt(sectionCountRaw) : 0
+                                        await AsyncStorage.setItem(sectionKey, (sectionCount + delta).toString())
 
-                                        // Optional: Append a lightweight activity log entry (helps with auditing)
-                                        const activityRef = push(ref(database, `users/${userId}/sessions/${sessionId}/activities`))
-                                        await update(activityRef, {
+                                        // Store activity log
+                                        const activityKey = `activity_${sessionId}_${Date.now()}`
+                                        const activity = {
                                                 type: metricKey,
                                                 voterKey: voter.firebaseKey || null,
-                                                voterName: voter["नाव"] || null,
+                                                voterName: voter["नाव"] || voter["मतदाराचे_पूर्ण_नांव"] || null,
                                                 village: voter.village || null,
                                                 division: voter.division || null,
                                                 vibhag: voter.vibhag || null,
                                                 change: delta,
                                                 at: new Date().toISOString(),
-                                        })
+                                        }
+                                        await AsyncStorage.setItem(activityKey, JSON.stringify(activity))
+
                                 } catch (trackingErr) {
                                         // Do not fail the main operation if tracking fails
                                         console.warn("[VoterContext] tracking error:", trackingErr)
                                 }
 
+                                setLoading(false)
                                 return true
                         } catch (err: any) {
                                 setError(err.message)
                                 // Revert optimistic update if needed
                                 setVoters((prevVoters) => [...prevVoters])
-                                return false
-                        } finally {
                                 setLoading(false)
+                                return false
                         }
                 },
                 [clearError],

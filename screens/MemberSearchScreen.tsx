@@ -8,7 +8,7 @@ import {
         FlatList,
         TouchableOpacity,
         Image,
-        ActivityIndicator, // Add this import
+        ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useVoters } from '../contexts/VoterContext';
@@ -28,7 +28,7 @@ const MemberSearchScreen = ({ navigation, route }) => {
                 status: voter['मतदान झाले'] ? 'मतदान झाले' :
                         voter['स्लिप जारी केली'] ? 'स्लिप जारी केली' : 'प्रलंबित',
                 id: voter['मतदार_ओळखपत्र_क्रमांक'],
-                name: voter['नाव'],
+                name: voter['नाव'] || voter['मतदाराचे_पूर्ण_नांव'],
                 address: `${village}, ${division}, ${vibhag}`
         }));
 
@@ -157,7 +157,7 @@ const MemberSearchScreen = ({ navigation, route }) => {
                         <FlatList
                                 data={filteredMembers}
                                 renderItem={renderMember}
-                                keyExtractor={(item) => item.firebaseKey || item.id} // Use firebaseKey if available, fallback to id
+                                keyExtractor={(item) => item.firebaseKey || item.id}
                                 style={styles.membersList}
                                 showsVerticalScrollIndicator={false}
                                 ListEmptyComponent={
@@ -169,6 +169,7 @@ const MemberSearchScreen = ({ navigation, route }) => {
                 </SafeAreaView>
         );
 };
+
 
 const styles = StyleSheet.create({
         container: {

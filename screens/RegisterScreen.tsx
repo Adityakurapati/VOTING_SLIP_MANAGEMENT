@@ -92,7 +92,8 @@ const RegisterScreen = ({ navigation }) => {
       await set(ref(database, `users/${mobileNumber}`), {
         fullName: fullName.trim(),
         phone: mobileNumber,
-        userType,
+        userType: "फील्ड एजंट",
+        validated: false, // Requires admin approval
         createdAt: new Date().toISOString(),
         currentSession: null,
         lastLogin: null,
@@ -101,7 +102,7 @@ const RegisterScreen = ({ navigation }) => {
         isActive: false,
       })
 
-      Alert.alert("यशस्वी!", "तुमचे खाते तयार झाले आहे. कृपया लॉगिन करा.", [
+      Alert.alert("यशस्वी!", "तुमचे खाते तयार झाले आहे. प्रशासकाच्या मंजुरीनंतर तुम्ही लॉगिन करू शकाल.", [
         { text: "ठीक आहे", onPress: () => navigation.navigate("Login") },
       ])
     } catch (error) {
@@ -163,28 +164,15 @@ const RegisterScreen = ({ navigation }) => {
           />
         </View>
 
-        {/* User Type Selection */}
+        {/* User Type Selection - Only Field Agent */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>भूमिका *</Text>
           <View style={styles.userTypeContainer}>
-            <TouchableOpacity
-              style={[styles.userTypeButton, userType === "फील्ड एजंट" && styles.userTypeButtonActive]}
-              onPress={() => setUserType("फील्ड एजंट")}
-              activeOpacity={0.7}
-              disabled={loading || otpRequested}
-            >
-              <Text style={[styles.userTypeText, userType === "फील्ड एजंट" && styles.userTypeTextActive]}>फील्ड एजंट</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.userTypeButton, userType === "प्रशासन" && styles.userTypeButtonActive]}
-              onPress={() => setUserType("प्रशासन")}
-              activeOpacity={0.7}
-              disabled={loading || otpRequested}
-            >
-              <Text style={[styles.userTypeText, userType === "प्रशासन" && styles.userTypeTextActive]}>प्रशासन</Text>
+            <TouchableOpacity style={[styles.userTypeButton, styles.userTypeButtonActive]} disabled={true}>
+              <Text style={[styles.userTypeText, styles.userTypeTextActive]}>फील्ड एजंट</Text>
             </TouchableOpacity>
           </View>
+          <Text style={styles.noteText}>नोंद: केवळ फील्ड एजंट नोंदणी उपलब्ध आहे. प्रशासक खाते मॅन्युअली तयार केले जाते.</Text>
         </View>
 
         {/* OTP Field (after request) */}
@@ -365,6 +353,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#3B82F6",
     fontWeight: "600",
+  },
+  noteText: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginTop: 8,
+    fontStyle: "italic",
   },
 })
 
