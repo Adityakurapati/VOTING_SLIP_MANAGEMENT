@@ -52,27 +52,44 @@ const DashboardScreen = ({ navigation }) => {
                 votingDone: 0,
         })
         const [bhagTotalVoters, setBhagTotalVoters] = useState(0) // Total voters for entire bhag
+        const [bhagTotalSlips, setBhagTotalSlips] = useState(0) // Total slips for entire bhag
+        const [bhagTotalVoting, setBhagTotalVoting] = useState(0) // Total voting for entire bhag
 
         const { refreshVoters, loading } = useVoters()
 
-        // Function to calculate total voters for entire bhag (all vibhags combined)
-        const calculateBhagTotalVoters = (village: string, bhag: string) => {
+        // Function to calculate total stats for entire bhag (all vibhags combined)
+        const calculateBhagTotalStats = (village: string, bhag: string) => {
                 const villagesRef = ref(database, "villages")
 
                 onValue(villagesRef, (snapshot) => {
                         const data = snapshot.val()
                         let totalVoters = 0
+                        let totalSlips = 0
+                        let totalVoting = 0
 
                         if (data && data[village] && data[village][bhag]) {
-                                // Sum up voters from all vibhags in this bhag
+                                // Sum up stats from all vibhags in this bhag
                                 Object.values(data[village][bhag]).forEach((vibhagData: any) => {
                                         if (vibhagData && typeof vibhagData === 'object') {
-                                                totalVoters += Object.keys(vibhagData).length
+                                                const vibhagVoters = Object.keys(vibhagData).length
+                                                totalVoters += vibhagVoters
+
+                                                // Calculate slips and voting for this vibhag
+                                                Object.values(vibhagData).forEach((voter: any) => {
+                                                        if (voter["स्लिप_जारी_केली"] === true || voter["स्लिप जारी केली"] === true) {
+                                                                totalSlips++
+                                                        }
+                                                        if (voter["मतदान_झाले"] === true || voter["मतदान झाले"] === true) {
+                                                                totalVoting++
+                                                        }
+                                                })
                                         }
                                 })
                         }
 
                         setBhagTotalVoters(totalVoters)
+                        setBhagTotalSlips(totalSlips)
+                        setBhagTotalVoting(totalVoting)
                 })
         }
 
@@ -111,7 +128,7 @@ const DashboardScreen = ({ navigation }) => {
         // Update bhag total when village and bhag are selected
         useEffect(() => {
                 if (selectedVillage && selectedBhag) {
-                        calculateBhagTotalVoters(selectedVillage, selectedBhag)
+                        calculateBhagTotalStats(selectedVillage, selectedBhag)
 
                         // Reset vibhag-specific stats
                         setStats({
@@ -153,6 +170,8 @@ const DashboardScreen = ({ navigation }) => {
                 setSelectedBhag(null)
                 setSelectedVibhag(null)
                 setBhagTotalVoters(0)
+                setBhagTotalSlips(0)
+                setBhagTotalVoting(0)
                 setStats({ totalVoters: 0, slipIssued: 0, votingDone: 0 })
 
                 const bhags = Object.keys(VILLAGE_DATA[village])
@@ -241,26 +260,34 @@ const DashboardScreen = ({ navigation }) => {
                                                 )}
                                         </View>
 
-                                        {/* Slip Issued - Show only when vibhag is selected */}
+                                        {/* Slip Issued - Show bhag total or vibhag total based on selection */}
                                         <View style={styles.statCard}>
                                                 <Text style={styles.statNumber}>
-                                                        {showVibhagStats ? stats.slipIssued : "-"}
+                                                        {showOnlyBhagTotal ? bhagTotalSlips :
+                                                                showVibhagStats ? stats.slipIssued : "0"}
                                                 </Text>
                                                 <Text style={styles.statLabel}>स्लिप जारी केली</Text>
-                                                {!showVibhagStats && showOnlyBhagTotal && (
-                                                        <Text style={styles.statHint}>विभाग निवडा</Text>
+                                                {showOnlyBhagTotal && (
+                                                        <Text style={styles.statSubText}>(संपूर्ण भाग)</Text>
+                                                )}
+                                                {showVibhagStats && (
+                                                        <Text style={styles.statSubText}>(विभाग)</Text>
                                                 )}
                                         </View>
                                 </View>
 
-                                {/* Voting Done Card - Show only when vibhag is selected */}
+                                {/* Voting Done Card - Show bhag total or vibhag total based on selection */}
                                 <View style={[styles.statCard, { width: "100%", marginBottom: 16 }]}>
                                         <Text style={styles.statNumber}>
-                                                {showVibhagStats ? stats.votingDone : "-"}
+                                                {showOnlyBhagTotal ? bhagTotalVoting :
+                                                        showVibhagStats ? stats.votingDone : "0"}
                                         </Text>
                                         <Text style={styles.statLabel}>मतदान झाले</Text>
-                                        {!showVibhagStats && showOnlyBhagTotal && (
-                                                <Text style={styles.statHint}>विभाग निवडा</Text>
+                                        {showOnlyBhagTotal && (
+                                                <Text style={styles.statSubText}>(संपूर्ण भाग)</Text>
+                                        )}
+                                        {showVibhagStats && (
+                                                <Text style={styles.statSubText}>(विभाग)</Text>
                                         )}
                                 </View>
 
@@ -268,10 +295,10 @@ const DashboardScreen = ({ navigation }) => {
                                 {showOnlyBhagTotal && (
                                         <View style={styles.selectionStatus}>
                                                 <Text style={styles.selectionStatusText}>
-                                                        ✅ गाव आणि भाग निवडले आहे. एकूण {bhagTotalVoters} मतदार.
+                                                        ✅ {selectedVillage} - {selectedBhag} निवडले आहे.
                                                 </Text>
                                                 <Text style={styles.selectionStatusSubText}>
-                                                        तपशीलासाठी विभाग निवडा.
+                                                        {bhagTotalVoters} मतदार, {bhagTotalSlips} स्लिप जारी, {bhagTotalVoting} मतदान झाले.
                                                 </Text>
                                         </View>
                                 )}
@@ -279,7 +306,7 @@ const DashboardScreen = ({ navigation }) => {
                                 {showVibhagStats && (
                                         <View style={[styles.selectionStatus, { backgroundColor: "#E3F2FD", borderLeftColor: "#2196F3" }]}>
                                                 <Text style={[styles.selectionStatusText, { color: "#1565C0" }]}>
-                                                        ✅ {selectedVibhag} विभाग निवडले आहे.
+                                                        ✅ {selectedVillage} - {selectedBhag} - {selectedVibhag} निवडले आहे.
                                                 </Text>
                                                 <Text style={[styles.selectionStatusSubText, { color: "#1976D2" }]}>
                                                         {stats.totalVoters} मतदार, {stats.slipIssued} स्लिप जारी, {stats.votingDone} मतदान झाले.
@@ -361,6 +388,7 @@ const DashboardScreen = ({ navigation }) => {
         )
 }
 
+// Keep all your existing styles exactly the same
 const styles = StyleSheet.create({
         container: {
                 flex: 1,

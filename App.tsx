@@ -55,7 +55,6 @@ function HomeTabs() {
                 >
                         <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ tabBarLabel: "डैशबोर्ड" }} />
                         <Tab.Screen name="Members" component={MemberSearchScreen} options={{ tabBarLabel: "सदस्य" }} />
-                        <Tab.Screen name="SlipIssue" component={SlipIssueScreen} options={{ tabBarLabel: "स्लिप समस्या" }} />
                         <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: "प्रोफाइल" }} />
                 </Tab.Navigator>
         )
