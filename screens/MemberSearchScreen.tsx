@@ -68,6 +68,7 @@ const MemberSearchScreen = ({ navigation, route }) => {
                 >
                         <Image source={item.avatar} style={styles.memberAvatar} />
                         <View style={styles.memberInfo}>
+                                <Text style={styles.memberName}>{item["मतदाराचे_पूर्ण_नांव"]}</Text>
                                 <Text style={styles.memberName}>{item.name}</Text>
                                 <Text style={styles.memberId}>मतदार ID: {item.id}</Text>
                                 <Text style={styles.memberAddress}>{item.address}</Text>

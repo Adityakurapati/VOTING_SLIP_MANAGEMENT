@@ -72,7 +72,7 @@ export const VoterProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         setCurrentVibhag(vibhag)
 
                         try {
-                                const votersRef = ref(database, `villages/${village}/${division}/${vibhag}/मतदार_यादी`)
+                                const votersRef = ref(database, `villages/${village}/${division}/${vibhag}`)
 
                                 return new Promise<void>((resolve, reject) => {
                                         const unsubscribe = onValue(
@@ -134,7 +134,7 @@ export const VoterProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                                 // Update the voter record first
                                 const voterRef = ref(
                                         database,
-                                        `villages/${voter.village}/${voter.division}/${voter.vibhag}/मतदार_यादी/${voter.firebaseKey}`,
+                                        `villages/${voter.village}/${voter.division}/${voter.vibhag}/${voter.firebaseKey}`,
                                 )
 
                                 await update(voterRef, { [field]: value })

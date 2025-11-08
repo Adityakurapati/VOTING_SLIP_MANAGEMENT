@@ -29,12 +29,6 @@ const LoginScreen = ({ navigation }) => {
         const [locationLoading, setLocationLoading] = useState(false)
         const [otpRequested, setOtpRequested] = useState(false)
 
-        // Direct login numbers - no OTP required
-        const DIRECT_LOGIN_NUMBERS = {
-                "1234567890": "फील्ड एजंट", // Field agent direct login
-                "7507546319": "प्रशासन" // Admin direct login
-        }
-
         const createUserSession = async (userId, phone, actualUserType, loginLocation) => {
                 try {
                         const sessionId = push(ref(database, `users/${userId}/sessions`)).key
@@ -98,23 +92,6 @@ const LoginScreen = ({ navigation }) => {
                                         actualUserType,
                                 }
                         } else {
-                                // For direct login numbers, create user if doesn't exist
-                                if (DIRECT_LOGIN_NUMBERS[userId]) {
-                                        const userTypeForDirectLogin = DIRECT_LOGIN_NUMBERS[userId]
-                                        await set(ref(database, `users/${userId}`), {
-                                                phone: userId,
-                                                userType: userTypeForDirectLogin,
-                                                validated: true,
-                                                isActive: false,
-                                                createdAt: new Date().toISOString(),
-                                        })
-
-                                        return {
-                                                isValid: true,
-                                                actualUserType: userTypeForDirectLogin,
-                                        }
-                                }
-
                                 return {
                                         isValid: false,
                                         message: "वापरकर्ता सापडला नाही",
@@ -125,93 +102,9 @@ const LoginScreen = ({ navigation }) => {
                         console.error("Error validating user role:", error)
                         return {
                                 isValid: false,
-                                message: "वापरकर्ता सामग्री तपासताना त्रुटी",
+                                message: "वాపరుకర్త సమాచారం పరీక్షతానికి తెలియదు",
                                 actualUserType: null,
                         }
-                }
-        }
-
-        const isDirectLoginNumber = (number) => {
-                return DIRECT_LOGIN_NUMBERS.hasOwnProperty(number)
-        }
-
-        const handleDirectLogin = async () => {
-                setLoading(true)
-                setLocationLoading(true)
-
-                try {
-                        const locationResult = await getCurrentLocation()
-                        setLocationLoading(false)
-
-                        let loginLocation = null
-                        if (locationResult.success) {
-                                loginLocation = locationResult.location
-                        } else {
-                                Alert.alert("स्थान त्रुटी", `${locationResult.error}\n\nतरीही लॉगिन करायचे?`, [
-                                        {
-                                                text: "रद्द करा",
-                                                style: "cancel",
-                                                onPress: () => {
-                                                        setLoading(false)
-                                                        return
-                                                },
-                                        },
-                                        {
-                                                text: "लॉगिन करा",
-                                                onPress: () => proceedWithDirectLogin(null),
-                                        },
-                                ])
-                                return
-                        }
-
-                        await proceedWithDirectLogin(loginLocation)
-                } catch (error) {
-                        console.error("Direct login error:", error)
-                        setLoading(false)
-                        setLocationLoading(false)
-                        Alert.alert("त्रुटी", "लॉगिन करताना त्रुटी आली")
-                }
-        }
-
-        const proceedWithDirectLogin = async (loginLocation) => {
-                try {
-                        const userId = mobileNumber
-                        const expectedUserType = DIRECT_LOGIN_NUMBERS[userId]
-
-                        // Validate user type matches the direct login configuration
-                        if (userType !== expectedUserType) {
-                                Alert.alert("प्रवेश नाकारला", `कृपया ${expectedUserType} म्हणून लॉगिन करा`)
-                                setLoading(false)
-                                return
-                        }
-
-                        const roleValidation = await validateUserRole(userId, userType)
-
-                        if (!roleValidation.isValid) {
-                                Alert.alert("प्रवेश नाकारला", roleValidation.message)
-                                setLoading(false)
-                                return
-                        }
-
-                        await createUserSession(userId, mobileNumber, roleValidation.actualUserType, loginLocation)
-
-                        if (roleValidation.actualUserType === "प्रशासन") {
-                                navigation.reset({
-                                        index: 0,
-                                        routes: [{ name: "Admin" }],
-                                })
-                        } else {
-                                navigation.reset({
-                                        index: 0,
-                                        routes: [{ name: "FieldAgent" }],
-                                })
-                        }
-                } catch (error) {
-                        console.error("Direct login error:", error)
-                        Alert.alert("त्रुटी", "लॉगिन करताना त्रुटी आली")
-                } finally {
-                        setLoading(false)
-                        setLocationLoading(false)
                 }
         }
 
@@ -221,31 +114,9 @@ const LoginScreen = ({ navigation }) => {
                         return
                 }
 
-                // Check if this is a direct login number
-                if (isDirectLoginNumber(mobileNumber)) {
-                        Alert.alert("डायरेक्ट लॉगिन", "हा नंबर डायरेक्ट लॉगिनसाठी आहे. OTP न करता लॉगिन होईल.")
-                        return
-                }
-
                 setLoading(true)
 
                 try {
-                        const userRef = ref(database, `users/${mobileNumber}`)
-                        const userSnap = await get(userRef)
-
-                        if (!userSnap.exists()) {
-                                Alert.alert("त्रुटी", "हा मोबाईल नंबर नोंदणीकृत नाही. कृपया प्रथम नोंदणी करा.")
-                                setLoading(false)
-                                return
-                        }
-
-                        const userData = userSnap.val()
-                        if (!userData.validated) {
-                                Alert.alert("प्रतीक्षा करा", "तुमचे खाते अद्याप प्रशासकाने मंजूर केले नाही. कृपया प्रशासकाशी संपर्क साधा.")
-                                setLoading(false)
-                                return
-                        }
-
                         const otp = generateOTP()
                         await storeOtp(mobileNumber, otp)
 
@@ -266,25 +137,13 @@ const LoginScreen = ({ navigation }) => {
         }
 
         const handleLogin = async () => {
-                if (!mobileNumber) {
-                        Alert.alert("त्रुटी", "कृपया मोबाईल नंबर भरा")
+                if (!mobileNumber || !otp) {
+                        Alert.alert("त्रुटी", "कृपया मोबाईल नंबर आणि OTP भरा")
                         return
                 }
 
                 if (mobileNumber.length !== 10) {
                         Alert.alert("त्रुटी", "कृपया वैध 10 अंकी मोबाईल नंबर भरा")
-                        return
-                }
-
-                // Handle direct login for specific numbers
-                if (isDirectLoginNumber(mobileNumber)) {
-                        await handleDirectLogin()
-                        return
-                }
-
-                // Regular OTP login for other numbers
-                if (!otp) {
-                        Alert.alert("त्रुटी", "कृपया OTP भरा")
                         return
                 }
 
@@ -338,7 +197,7 @@ const LoginScreen = ({ navigation }) => {
 
         const proceedWithLogin = async (loginLocation) => {
                 try {
-                        const userId = mobileNumber
+                        const userId = mobileNumber // use phone number as userId
 
                         const userRef = ref(database, `users/${userId}`)
                         const userSnap = await get(userRef)
@@ -377,33 +236,13 @@ const LoginScreen = ({ navigation }) => {
                 }
         }
 
-        const handleMobileNumberChange = (text) => {
-                setMobileNumber(text)
-                // Reset OTP requested state when mobile number changes
-                if (otpRequested) {
-                        setOtpRequested(false)
-                        setOtp("")
-                }
-        }
-
-        const getLoginButtonText = () => {
-                if (isDirectLoginNumber(mobileNumber)) {
-                        return "डायरेक्ट लॉगिन"
-                }
-                return otpRequested ? "लॉगिन करा" : "OTP मिळवा"
-        }
-
-        const shouldShowOtpField = () => {
-                return otpRequested && !isDirectLoginNumber(mobileNumber)
-        }
-
         return (
                 <SafeAreaView style={styles.container}>
                         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
                         <View style={styles.content}>
                                 {/* Celebration Image */}
                                 <View style={styles.imageContainer}>
-                                        <Image source={require("../assets/hero.jpg")} style={styles.celebrationImage} resizeMode="contain" />
+                                        <Image source={require("../assets/banner.jpeg")} style={styles.celebrationImage} resizeMode="contain" />
                                 </View>
 
                                 {/* Title */}
@@ -437,13 +276,13 @@ const LoginScreen = ({ navigation }) => {
                                                 placeholder="मोबाईल नंबर"
                                                 placeholderTextColor="#9CA3AF"
                                                 value={mobileNumber}
-                                                onChangeText={handleMobileNumberChange}
+                                                onChangeText={setMobileNumber}
                                                 keyboardType="phone-pad"
                                                 maxLength={10}
-                                                editable={!loading}
+                                                editable={!loading && !otpRequested}
                                         />
 
-                                        {shouldShowOtpField() && (
+                                        {otpRequested && (
                                                 <TextInput
                                                         style={styles.input}
                                                         placeholder="OTP"
@@ -455,15 +294,6 @@ const LoginScreen = ({ navigation }) => {
                                                         editable={!loading}
                                                 />
                                         )}
-
-                                        {/* Direct Login Info */}
-                                        {isDirectLoginNumber(mobileNumber) && (
-                                                <View style={styles.directLoginInfo}>
-                                                        <Text style={styles.directLoginText}>
-                                                                ✅ डायरेक्ट लॉगिन: OTP न करता लॉगिन होईल
-                                                        </Text>
-                                                </View>
-                                        )}
                                 </View>
 
                                 {/* Location Status */}
@@ -474,19 +304,26 @@ const LoginScreen = ({ navigation }) => {
                                         </View>
                                 )}
 
-                                {/* Login Button */}
-                                <TouchableOpacity
-                                        style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-                                        onPress={isDirectLoginNumber(mobileNumber) ? handleDirectLogin : (otpRequested ? handleLogin : requestOTP)}
-                                        activeOpacity={0.8}
-                                        disabled={loading}
-                                >
-                                        {loading ? (
-                                                <ActivityIndicator color="#ffffff" />
-                                        ) : (
-                                                <Text style={styles.loginButtonText}>{getLoginButtonText()}</Text>
-                                        )}
-                                </TouchableOpacity>
+                                {/* OTP Request/Login Button */}
+                                {!otpRequested ? (
+                                        <TouchableOpacity
+                                                style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                                                onPress={requestOTP}
+                                                activeOpacity={0.8}
+                                                disabled={loading}
+                                        >
+                                                {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.loginButtonText}>OTP मिळवा</Text>}
+                                        </TouchableOpacity>
+                                ) : (
+                                        <TouchableOpacity
+                                                style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                                                onPress={handleLogin}
+                                                activeOpacity={0.8}
+                                                disabled={loading}
+                                        >
+                                                {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.loginButtonText}>लॉगिन करा</Text>}
+                                        </TouchableOpacity>
+                                )}
 
                                 {/* Register Button */}
                                 <TouchableOpacity
@@ -579,20 +416,6 @@ const styles = StyleSheet.create({
                 color: "#1F2937",
                 marginBottom: 16,
                 fontWeight: "400",
-        },
-        directLoginInfo: {
-                backgroundColor: "#d1fae5",
-                padding: 12,
-                borderRadius: 8,
-                borderLeftWidth: 4,
-                borderLeftColor: "#10b981",
-                marginBottom: 16,
-        },
-        directLoginText: {
-                color: "#065f46",
-                fontSize: 14,
-                fontWeight: "500",
-                textAlign: "center",
         },
         locationStatus: {
                 flexDirection: "row",

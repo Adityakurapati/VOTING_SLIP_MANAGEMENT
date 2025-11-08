@@ -1,52 +1,64 @@
 {
-  "expo": {
-    "name": "Voting Slip Management",
-    "slug": "voting-slip-management",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "This app needs location access to track field agent activities and voting locations.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs location access to track field agent activities and voting locations."
-      }
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION"
-      ],
-      "minSdkVersion": 24,
-      "package": "com.adityai25.votingslipmanagement"
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "plugins": [],
-    "extra": {
-      "eas": {
-        "projectId": "539e6062-6fc9-49ab-a33c-7ea2cff0491b"
-      }
-    }
-  }
+        "expo": {
+                "name": "Voting Slip Management",
+                "slug": "voting-slip-management",
+                "version": "1.0.0",
+                "orientation": "portrait",
+                "icon": "./assets/icon.png",
+                "userInterfaceStyle": "light",
+                "splash": {
+                        "image": "./assets/splash-icon.png",
+                        "resizeMode": "contain",
+                        "backgroundColor": "#ffffff"
+                },
+                "assetBundlePatterns": [
+                        "**/*"
+                ],
+                "ios": {
+                        "supportsTablet": true,
+                        "infoPlist": {
+                                "NSPhotoLibraryUsageDescription": "This app needs photo library access to save voter slips to your device.",
+                                "NSPhotoLibraryAddUsageDescription": "This app needs photo library access to save voter slips to your device."
+                        }
+                },
+                "android": {
+                        "adaptiveIcon": {
+                                "foregroundImage": "./assets/adaptive-icon.png",
+                                "backgroundColor": "#ffffff"
+                        },
+                        "permissions": [
+                                "ACCESS_FINE_LOCATION",
+                                "ACCESS_COARSE_LOCATION",
+                                "ACCESS_BACKGROUND_LOCATION",
+                                "android.permission.ACCESS_COARSE_LOCATION",
+                                "android.permission.ACCESS_FINE_LOCATION",
+                                "android.permission.ACCESS_BACKGROUND_LOCATION",
+                                "android.permission.FOREGROUND_SERVICE",
+                                "android.permission.FOREGROUND_SERVICE_LOCATION",
+                                "android.permission.READ_EXTERNAL_STORAGE",
+                                "android.permission.WRITE_EXTERNAL_STORAGE",
+                                "android.permission.ACCESS_MEDIA_LOCATION"
+                        ],
+                        "minSdkVersion": 24,
+                        "package": "com.adityai25.votingslipmanagement"
+                },
+                "web": {
+                        "favicon": "./assets/favicon.png"
+                },
+                "plugins": [
+                        [
+                                "expo-media-library",
+                                {
+                                        "photosPermission": "Allow $(PRODUCT_NAME) to access your photos for saving voter slips.",
+                                        "savePhotosPermission": "Allow $(PRODUCT_NAME) to save voter slips to your photo library.",
+                                        "isAccessMediaLocationEnabled": true
+                                }
+                        ]
+                ],
+                "extra": {
+                        "eas": {
+                                "projectId": "539e6062-6fc9-49ab-a33c-7ea2cff0491b"
+                        }
+                }
+        }
 }
